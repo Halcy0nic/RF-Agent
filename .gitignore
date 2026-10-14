@@ -1,0 +1,66 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Scratch space (captures, screenshots, experiments) ----
+tmp/
+scratch/
+out/
+
+# ---- IQ recordings and other large RF data ----
+# Keep recordings out of git. Commit the script that makes a file, not the file.
+*.cs8
+*.cu8
+*.cs16
+*.cf32
+*.cfile
+*.fc32
+*.iq
+*.raw
+*.bin
+*.dat
+*.sigmf-data
+*.wav
+*.npy
+*.npz
+*.h5
+*.hdf5
+
+# rtl_power / hackrf_sweep logs
+*.csv.gz
+sweep_*.csv
+survey_*.csv
+
+# Generated plots (docs images live in */images/ and are whitelisted)
+*.png
+!**/images/*.png
+
+# Compiled helpers
+software/sdr++/tools/winlist
+
+# ---- OS / editors ----
+.DS_Store
+.AppleDouble
+.Spotlight-V100
+.Trashes
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
+
+# ---- Secrets (never commit) ----
+.env
+*.pem
+*.key

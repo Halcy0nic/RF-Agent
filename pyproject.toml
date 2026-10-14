@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rfkit"
+version = "0.1.0"
+description = "NumPy toolkit for generating, reading and analysing IQ samples (HackRF, RTL-SDR, USRP, SDR++)"
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.22", "matplotlib>=3.5"]
+
+[project.optional-dependencies]
+full = ["scipy>=1.8", "pillow>=9"]
+
+[tool.setuptools]
+packages = ["rfkit"]
