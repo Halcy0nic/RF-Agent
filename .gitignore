@@ -19,7 +19,6 @@ scratch/
 out/
 
 # ---- IQ recordings and other large RF data ----
-# Keep recordings out of git. Commit the script that makes a file, not the file.
 *.cs8
 *.cu8
 *.cs16
@@ -60,7 +59,7 @@ Thumbs.db
 *.swp
 *~
 
-# ---- Secrets (never commit) ----
+# ---- Secrets ----
 .env
 *.pem
 *.key

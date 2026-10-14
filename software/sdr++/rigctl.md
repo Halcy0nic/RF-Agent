@@ -127,7 +127,7 @@ $P $T tune 434.5e6 && $P $T record 5 --out tmp/sdrpp/caps/survey_434.wav
 # One-shot: profile + record + screenshots + run a transmitter + analyse (verified end to end)
 $P signal_generation/generate.py fsk --text "SDRPP CAPTURE" --rate 5000 --dev 20e3 --repeat 3 -o tmp/gen/cap_fsk.cs8
 $P $T capture fsk_cli --freq 433.92e6 --seconds 4 --shots 1 --analyze -- \
-   $P radios/hackrf/tools/hackrf_tx.py tmp/gen/cap_fsk.cs8 --freq 433.92e6 --rate 2e6 --gain 20 --occupied-bw 400e3
+   $P radios/hackrf/tools/hackrf_tx.py tmp/gen/cap_fsk.cs8 --freq 433.92e6 --rate 2e6 --gain 20
 $P tools/rx_decode.py fsk tmp/sdrpp/caps/fsk_cli.wav       # -> 3 x "SDRPP CAPTURE", crc_ok true
 ```
 
@@ -153,7 +153,7 @@ wav = sdrpp.record(5.0, dest="tmp/sdrpp/caps/cap.wav")    # rec_start, sleep, re
 png = sdrpp.grab("tmp/sdrpp/shots/cap.png")               # waterfall screenshot
 ```
 
-### Isolated config root (default): never touch the user's settings
+### Isolated config root (default)
 
 `sdrpp.py` launches SDR++ as `open -a SDR++ --args -r <repo>/tmp/sdrpp/root`, a private config directory
 seeded once from the user's config. Profiles are written there. Verified: the user's
@@ -250,10 +250,10 @@ SDR++ then pushes its frequency to the radio, so tuning the waterfall tunes the 
 
 ---
 
-## 8. Cleanup checklist
+## 8. Useful afterwards
 
 ```bash
-pgrep -lf hackrf_transfer                         # must print nothing
-.venv/bin/python software/sdr++/tools/sdrppctl.py user   # close the automation SDR++, reopen the user's
+pgrep -lf hackrf_transfer                         # any transmitter still running
+.venv/bin/python software/sdr++/tools/sdrppctl.py user   # close the automation SDR++, reopen it with the normal config
 rm -f tmp/sdrpp/caps/*.wav tmp/sdrpp/rec/*.wav    # recordings are large
 ```

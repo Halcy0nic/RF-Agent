@@ -263,13 +263,13 @@ $P $T record 5 --out tmp/sdrpp/caps/test.wav                      # baseband WAV
 $P $T shot tmp/sdrpp/shots/now.png                                # window screenshot
 $P $T analyze tmp/sdrpp/caps/test.wav --png tmp/sdrpp/caps/test.png
 $P $T capture demo --freq 433.92e6 --seconds 6 --shots 2 --analyze -- \
-      $P radios/hackrf/tools/hackrf_tx.py sig.cs8 --freq 433.92e6 --rate 2e6 --gain 20 --occupied-bw 400e3
+      $P radios/hackrf/tools/hackrf_tx.py sig.cs8 --freq 433.92e6 --rate 2e6 --gain 20
 $P $T user                                                        # close automation SDR++, reopen yours
 ```
 
 `capture` = profile → launch → `\recorder_start` → run the TX command (if any) → screenshots during it →
 `\recorder_stop` → move the WAV to `tmp/sdrpp/caps/NAME.wav` → optional analysis (carriers with absolute
-frequency, SNR, bursts, overview PNG). Everything lands in `tmp/` (git-ignored).
+frequency, SNR, bursts, overview PNG). Everything lands in `tmp/`.
 
 Details, protocol and gotchas: [rigctl.md](rigctl.md).
 

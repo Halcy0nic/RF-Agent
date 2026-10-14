@@ -14,8 +14,8 @@
     sdrppctl.py analyze cap.wav [--png cap.png]
     sdrppctl.py quit | launch
 
-Outputs default to tmp/sdrpp/ in the repo (git-ignored). Run from anywhere.
-By default SDR++ runs in ISOLATED mode (`-r tmp/sdrpp/root`): your own SDR++ settings are never edited.
+Outputs default to tmp/sdrpp/ in the repo. Run from anywhere.
+By default SDR++ runs with its own config root (`-r tmp/sdrpp/root`), separate from the normal config.
 SDRPP_ISOLATED=0 drives the normal config instead (then backup/restore matter).
 """
 from __future__ import annotations

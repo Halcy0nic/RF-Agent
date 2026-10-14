@@ -4,7 +4,7 @@ A generated file is only proven when a separate receiver decodes it. This bench 
 automatically:
 
 ```text
-generate.py ─► case.cs8 ─► hackrf_tx.py (433.92 MHz, TX gain 20, amp off, bounded)
+generate.py ─► case.cs8 ─► hackrf_tx.py (433.92 MHz, TX gain 20, amp off)
                                  │  ~1 m of air
 SDR++ (RTL-SDR Blog V4, 1.024 MS/s, gain idx 20 = 37.2 dB, isolated config) ◄─ rigctl \recorder_start/stop
         └─► case.wav ─► sdrppctl.py analyze (carrier, SNR, PNG) ─► rx_decode.py ─► PASS/FAIL
@@ -63,7 +63,7 @@ spread their power over more bins, which is why PSK reads lower; it's not a weak
 P=.venv/bin/python
 $P signal_generation/generate.py ook --text "HELLO" --rate 1000 --repeat 3 -o tmp/ook.cs8
 $P software/sdr++/tools/sdrppctl.py capture ook_manual --freq 433.92e6 --seconds 5 --shots 1 --analyze -- \
-   $P radios/hackrf/tools/hackrf_tx.py tmp/ook.cs8 --freq 433.92e6 --rate 2e6 --gain 20 --occupied-bw 300e3
+   $P radios/hackrf/tools/hackrf_tx.py tmp/ook.cs8 --freq 433.92e6 --rate 2e6 --gain 20
 $P tools/rx_decode.py ook tmp/sdrpp/caps/ook_manual.wav
 ```
 
@@ -71,7 +71,7 @@ Without SDR++ (the RTL-SDR used directly). Run the receiver in the background, t
 
 ```bash
 rtl_sdr -f 433920000 -s 1024000 -g 37.2 -n 6144000 tmp/rx.cu8 &       # 6 s
-sleep 1; $P radios/hackrf/tools/hackrf_tx.py tmp/ook.cs8 --freq 433.92e6 --rate 2e6 --gain 20 --occupied-bw 300e3
+sleep 1; $P radios/hackrf/tools/hackrf_tx.py tmp/ook.cs8 --freq 433.92e6 --rate 2e6 --gain 20
 wait; $P tools/rx_decode.py ook tmp/rx.cu8 --fs 1.024e6
 ```
 

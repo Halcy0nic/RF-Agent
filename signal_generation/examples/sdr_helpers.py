@@ -57,4 +57,4 @@ def save_cs8(iq: np.ndarray, path: str, peak: int = 100, fs: float = SAMPLE_RATE
     out[1::2] = np.clip(np.round(iq.imag), -127, 127)
     out.tofile(path)
     print(f"wrote {path}: {len(iq):,} samples, {len(iq) / fs:.2f} s, {out.nbytes / 1e6:.1f} MB")
-    print(f"TX: gtimeout {int(len(iq) / fs) + 5} hackrf_transfer -t {path} -f 433920000 -s {int(fs)} -x 20 -a 0")
+    print(f"TX: hackrf_transfer -t {path} -f 433920000 -s {int(fs)} -x 20 -a 0")

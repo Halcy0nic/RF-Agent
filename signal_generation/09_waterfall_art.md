@@ -23,7 +23,7 @@ peak-to-average ratio sane) is weighted by each row's pixel values (`row @ basis
 
 ```bash
 .venv/bin/python signal_generation/generate.py text --text "RF AGENT" --bw 150e3 -o text.cs8 --plot
-.venv/bin/python radios/hackrf/tools/hackrf_tx.py text.cs8 --freq 433.92e6 --rate 2e6 --gain 20 --occupied-bw 400e3
+.venv/bin/python radios/hackrf/tools/hackrf_tx.py text.cs8 --freq 433.92e6 --rate 2e6 --gain 20
 ```
 
 The text is rendered with Pillow's default font (`--height` pixels tall, so that many rows), and each row

@@ -53,7 +53,7 @@ echo 'blacklist dvb_usb_rtl28xxu' | sudo tee /etc/modprobe.d/blacklist-rtl.conf 
 ```
 
 ```bash
-gtimeout 5 rtl_test -t        # -t = tuner/benchmark info, exits on its own
+rtl_test -t        # -t = tuner/benchmark info, exits on its own
 ```
 
 ```text
@@ -73,8 +73,8 @@ see "RTL-SDR Blog V4 Detected" on a V4, your librtlsdr is too old.
 Other `rtl_test` uses:
 
 ```bash
-gtimeout 10 rtl_test -s 2400000      # sample-drop test at 2.4 MS/s ("lost at least N bytes" = USB trouble)
-gtimeout 120 rtl_test -p             # estimate crystal ppm error against the system clock (let it run 1-2 min)
+rtl_test -s 2400000      # sample-drop test at 2.4 MS/s ("lost at least N bytes" = USB trouble)
+rtl_test -p             # estimate crystal ppm error against the system clock (let it run 1-2 min)
 ```
 
 **Only one program can open the dongle at a time.** If anything says "usb_claim_interface error -6", close
@@ -84,8 +84,8 @@ SDR++/GQRX/rtl_433/rtl_tcp first (`pgrep -lf "rtl_|sdrpp|gqrx"`).
 
 ## 3. Command-line tools
 
-All of these run until killed unless told otherwise. **Bound them** with `-n` (samples), `-1` or `-e`
-(rtl_power), `-T` (rtl_433), or `gtimeout N`.
+All of these stream until stopped unless given a length: `-n` (samples), `-1` or `-e` (rtl_power),
+`-T` (rtl_433), or a `gtimeout N` wrapper.
 
 ### `rtl_sdr`: raw IQ to a file
 
@@ -104,7 +104,7 @@ rtl_sdr -f 433920000 -s 1024000 -g 37.2 -n 2048000 - | python3 my_rx.py
 | `-s <hz>` | Sample rate (default 2,048,000) |
 | `-g <dB>` | Tuner gain in dB (nearest step). `0` = auto/AGC |
 | `-p <ppm>` | Frequency correction |
-| `-n <N>` | Number of samples, then exit. **Always use it** |
+| `-n <N>` | Number of samples, then exit (0 = until stopped) |
 | `-d <idx or serial>` | Choose the device |
 | `-D` | Direct sampling (V3 HF only. Not used on V4) |
 | `-S` | Synchronous output |
@@ -243,7 +243,7 @@ Bind to `127.0.0.1` unless you mean to expose the radio. The protocol has no aut
 5. **Calibrate ppm once per dongle.** Measure a known carrier (a HackRF tone, a NOAA weather station, an
    ADS-B/aircraft band reference, a GSM/LTE cell), then set `-p` / SDR++ PPM. A V4's TCXO is usually
    within 1–2 ppm. Most of the ~5 ppm offset seen on this bench is the HackRF.
-6. **Bound everything.** `-n` on `rtl_sdr`, `-1`/`-e` on `rtl_power`, `-T` on `rtl_433`, or `gtimeout`.
+6. **Set the capture length** with `-n` on `rtl_sdr`, `-1`/`-e` on `rtl_power`, `-T` on `rtl_433`.
 
 File sizes: CU8 = 2 bytes/sample → **2.048 MS/s = 4.1 MB/s**. SDR++ WAV (int16) = 4 bytes/sample →
 **8.2 MB/s at 2.048 MS/s** (measured here: 3 s → 24.6 MB).

@@ -7,7 +7,7 @@ OFDM and pictures in the waterfall. It also gives an agent ready-made tools to d
 
 ```text
  bits / message ──► symbols ──► samples (np.repeat or pulse shaping) ──► modulate ──► shift to offset
-      ──► scale to int8 (.cs8) ──► hackrf_transfer -t (bounded, low power) ──► RF ──► receiver verifies
+      ──► scale to int8 (.cs8) ──► hackrf_transfer -t ──► RF ──► receiver verifies
 ```
 
 ![Waterfall fingerprints of the generated signals, received over the air](../knowledge/images/waterfall_fingerprints.png)
@@ -33,7 +33,7 @@ covers tone → Morse → OOK → 2-FSK with real captures. These guides extend 
 | 08 | [Chirps, spread spectrum, OFDM](08_chirps_spread_ofdm.md) | Linear chirps, LoRa-style CSS, DSSS/Barker, toy OFDM |
 | 09 | [Waterfall art](09_waterfall_art.md) | Text and images that appear in an SDR waterfall |
 | 10 | [Noise and impairments](10_noise_and_impairments.md) | AWGN at a given SNR, CFO, phase, IQ imbalance, clipping, test signals for decoders |
-| 11 | [Transmitting](11_transmitting.md) | HackRF and USRP playback, gain, headroom, safety, legality |
+| 11 | [Transmitting](11_transmitting.md) | HackRF and USRP playback, gain, headroom, repeating, streaming |
 | 12 | [Verifying over the air](12_verifying_over_the_air.md) | Closed-loop TX → SDR++/RTL-SDR → decode, and the measured results |
 
 ## Tools
@@ -44,7 +44,7 @@ covers tone → Morse → OOK → 2-FSK with real captures. These guides extend 
 | [`examples/`](examples/) | Standalone NumPy-only scripts (no repo imports): `gen_tone.py`, `gen_morse.py`, `gen_ook.py`, `gen_2fsk.py`, `gen_bpsk.py`, `gen_nfm_tone.py` |
 | [`../rfkit/`](../rfkit/) | The library behind it: `iq` (file I/O), `bits` (framing/CRC/line codes), `mod` (modulators), `dsp` (receivers), `plot` |
 | [`../tools/rx_decode.py`](../tools/rx_decode.py) | Decoder for everything `generate.py` makes (Morse, OOK, Manchester OOK, FSK/GFSK, BPSK/QPSK, NFM/WFM audio) |
-| [`../radios/hackrf/tools/hackrf_tx.py`](../radios/hackrf/tools/hackrf_tx.py) | Guard-railed TX (frequency allow-list, gain cap, amp off, hard timeout) |
+| [`../radios/hackrf/tools/hackrf_tx.py`](../radios/hackrf/tools/hackrf_tx.py) | TX helper (duration readout, N replays with gaps, dry run) |
 
 ## Quick start
 
@@ -54,13 +54,13 @@ P=.venv/bin/python
 
 $P signal_generation/generate.py fsk --text "HELLO" --rate 5000 --dev 20e3 --repeat 3 --plot -o tmp/fsk.cs8
 $P tools/rx_decode.py fsk tmp/fsk.cs8 --fs 2e6                      # decode the file itself (loopback)
-$P radios/hackrf/tools/hackrf_tx.py tmp/fsk.cs8 --freq 433.92e6 --rate 2e6 --gain 20 --occupied-bw 300e3
+$P radios/hackrf/tools/hackrf_tx.py tmp/fsk.cs8 --freq 433.92e6 --rate 2e6 --gain 20
 ```
 
 Every `generate.py` run prints the file's duration, PAPR and 99 % occupied bandwidth, plus the matching
-bounded `hackrf_transfer` command. `--plot` writes a PSD/waterfall/magnitude PNG next to the file.
+`hackrf_transfer` command. `--plot` writes a PSD/waterfall/magnitude PNG next to the file.
 
-## The five rules
+## Five things that matter for clean signals
 
 1. **The sample rate is part of the signal.** Generate at the rate you'll transmit (`-s`). The HackRF
    needs ≥ 2 MS/s. Make the rate an integer multiple of the symbol rate (rfkit refuses otherwise).

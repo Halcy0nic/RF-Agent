@@ -18,7 +18,7 @@ Up-to-date notes on the SDR software used with the radios in [../radios](../radi
 | SoapySDR | 0.8.1 | Vendor-neutral device API (`SoapySDRUtil --find`) | — |
 | SDRangel | installed | Alternative GUI with TX support and USRP plugins | — |
 | `sox` | installed | Audio conversion (`rtl_fm` → WAV) | [../radios/rtl-sdr](../radios/rtl-sdr/README.md) |
-| `gtimeout` (coreutils) | installed | Bounding every capture/TX command | everywhere |
+| `gtimeout` (coreutils) | installed | Time-limiting commands in scripts | — |
 
 Other software worth knowing (not installed or documented here yet): **GQRX** (simple receiver),
 **Universal Radio Hacker (URH)** (record, demodulate and reverse packet protocols, with replay), **Inspectrum**

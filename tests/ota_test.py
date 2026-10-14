@@ -3,13 +3,12 @@
 
     python tests/ota_test.py                 # all cases
     python tests/ota_test.py ook fsk         # name filter
-    python tests/ota_test.py --tx-gain 10
+    python tests/ota_test.py --freq 915e6 --tx-gain 30 --rx-gain 28 --amp
     python tests/make_doc_images.py          # afterwards: rebuild the doc figures from tmp/ota/*.wav
 
 Needs: HackRF + RTL-SDR attached, SDR++ installed, antennas (or an attenuated cable) on both radios.
-Transmits ONLY inside 433.05-434.79 MHz at low TX gain via radios/hackrf/tools/hackrf_tx.py (guard-railed).
-SDR++ runs in isolated mode (its own config root under tmp/sdrpp/root), so your SDR++ settings are untouched.
-At the end the automation instance is closed (unless --keep-sdrpp).
+TX goes through radios/hackrf/tools/hackrf_tx.py. SDR++ uses its own config root (tmp/sdrpp/root).
+At the end the SDR++ instance is closed (unless --keep-sdrpp).
 Results: tmp/ota/<case>.{cs8,wav,json,png} and tmp/ota/summary.json
 """
 from __future__ import annotations
@@ -28,9 +27,7 @@ import sdrpp  # noqa: E402
 
 PY = sys.executable
 OUT = REPO / "tmp" / "ota"
-CENTER = 433.92e6
 FS_TX = 2_000_000
-RX_RATE = 1_024_000
 
 # name: (generate.py args, rx_decode.py args, expected substring in the decoded output)
 CASES = {
@@ -64,29 +61,32 @@ def run(cmd, **kw):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("only", nargs="*")
+    ap.add_argument("--freq", type=float, default=433.92e6, help="centre frequency for TX and RX, Hz")
+    ap.add_argument("--rx-rate", type=float, default=1_024_000, help="RTL-SDR sample rate in SDR++")
     ap.add_argument("--tx-gain", type=int, default=20)
+    ap.add_argument("--amp", action="store_true", help="HackRF RF amp on")
     ap.add_argument("--rx-gain", type=int, default=20, help="RTL gain index (20 = 37.2 dB)")
     ap.add_argument("--keep-sdrpp", action="store_true")
     a = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
     cases = {k: v for k, v in CASES.items() if not a.only or any(o in k for o in a.only)}
 
-    sdrpp.restart_with(dict(source="RTL-SDR", freq=CENTER, sample_rate=RX_RATE, gain=a.rx_gain,
+    sdrpp.restart_with(dict(source="RTL-SDR", freq=a.freq, sample_rate=a.rx_rate, gain=a.rx_gain,
                             min_db=-80, max_db=-20, fft_size=8192, fft_rate=30))
     time.sleep(2)
     summary = {}
     try:
         for name, (gen, dec, expect) in cases.items():
             cs8 = OUT / f"{name}.cs8"
-            g = run([PY, REPO / "signal_generation/generate.py", *gen, "-o", cs8, "--center", str(CENTER)])
+            g = run([PY, REPO / "signal_generation/generate.py", *gen, "-o", cs8, "--center", str(a.freq)])
             if g.returncode:
                 summary[name] = {"result": "GEN_FAIL", "err": g.stderr[-400:]}
                 continue
             before = set(sdrpp.REC_DIR.glob("*.wav"))
             sdrpp.rec_start()
             time.sleep(0.8)
-            tx = subprocess.Popen([PY, str(REPO / "radios/hackrf/tools/hackrf_tx.py"), str(cs8), "--freq", str(CENTER),
-                                   "--rate", str(FS_TX), "--gain", str(a.tx_gain), "--occupied-bw", "500e3"],
+            tx = subprocess.Popen([PY, str(REPO / "radios/hackrf/tools/hackrf_tx.py"), str(cs8), "--freq", str(a.freq),
+                                   "--rate", str(FS_TX), "--gain", str(a.tx_gain)] + (["--amp"] if a.amp else []),
                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             # waterfall screenshot: mid-transmission, or after it ends for waterfall art (so it has scrolled in)
             if name != "text":
@@ -108,7 +108,7 @@ def main():
             wav = OUT / f"{name}.wav"
             new[-1].rename(wav)
             info = json.loads(run([PY, REPO / "software/sdr++/tools/sdrppctl.py", "analyze", wav, "--png",
-                                   OUT / f"{name}.png", "--center", str(CENTER)]).stdout)
+                                   OUT / f"{name}.png", "--center", str(a.freq)]).stdout)
             top = info["carriers"][0] if info["carriers"] else {}
             res = {"tx_rc": tx.returncode, "carrier_offset_hz": round(top.get("freq_hz", 0)),
                    "snr_db": round(top.get("snr_db", 0), 1), "freq_error_hz": round(top.get("freq_hz", 0) - 100e3)}

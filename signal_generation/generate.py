@@ -188,7 +188,7 @@ def main():
             "occupied_bw_99_hz": round(dsp.occupied_bandwidth(x, a.fs)[0])}
     print(json.dumps(meta, indent=2))
     if out.suffix == ".cs8":
-        print(f"\nTX (bounded, low power):\n  gtimeout {int(len(x) / a.fs) + 5} hackrf_transfer -t {out} "
+        print(f"\nTX:\n  hackrf_transfer -t {out} "
               f"-f {int(a.center)} -s {int(a.fs)} -x 20 -a 0")
     if a.plot:
         from rfkit import plot

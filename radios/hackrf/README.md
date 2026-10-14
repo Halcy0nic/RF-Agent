@@ -98,9 +98,8 @@ Firmware since 2021 loads the CPLD bitstream itself. `hackrf_cpldjtag` is only n
 
 ## 3. `hackrf_transfer`: raw IQ in and out
 
-`hackrf_transfer` is the workhorse. **It runs until killed unless you pass `-n` (sample count) or give it a
-finite TX file.** An agent should never start it without `-n` (RX) or without a `gtimeout`/`timeout`
-wrapper (TX).
+`hackrf_transfer` is the workhorse. It runs until stopped unless you pass `-n` (sample count) or give it a
+finite TX file (without `-R`).
 
 ### Flags
 
@@ -110,15 +109,15 @@ wrapper (TX).
 | `-t <file>` | Transmit from file (`-` = stdin). CS8 |
 | `-w` | Receive to an auto-named WAV (SDR# style `HackRF_<date>_<time>Z_<freq>kHz_IQ.wav`) |
 | `-f <hz>` | Centre frequency (1 MHz – 6 GHz) |
-| `-s <hz>` | Sample rate (2–20 MHz). Default 10 MHz. **Always pass it** |
-| `-n <N>` | Number of samples, then exit. RX: always use it |
+| `-s <hz>` | Sample rate (2–20 MHz). Default 10 MHz, so pass it explicitly |
+| `-n <N>` | Number of samples, then exit |
 | `-l <dB>` | RX LNA/IF gain, 0–40, step 8 |
 | `-g <dB>` | RX VGA/baseband gain, 0–62, step 2 |
 | `-x <dB>` | TX VGA gain, 0–47, step 1 |
 | `-a 0/1` | RF amplifier (RX and TX). Default off |
 | `-p 0/1` | Antenna port power (3.3 V bias tee) |
 | `-b <hz>` | Baseband filter bandwidth (see table above) |
-| `-R` | Repeat TX file forever. **Avoid**; loop a bounded number of times instead |
+| `-R` | Repeat the TX file until stopped |
 | `-c <0-127>` | CW mode: transmit a constant DC value, which gives a carrier exactly at `-f` (LO leakage + DC) |
 | `-C <ppm>` | Crystal error correction in ppm |
 | `-S <bytes>` | RX streaming buffer size |
@@ -152,20 +151,21 @@ samples hitting ±127. Check with `tools/iq_inspect.py` (`clipped_fraction`).
 ### Transmit
 
 ```bash
-# Generate (see signal_generation/), then send ONE bounded burst at low power:
-gtimeout 10 hackrf_transfer -t signal.cs8 -f 433920000 -s 2000000 -x 20 -a 0
+# Generate (see signal_generation/), then transmit the file once:
+hackrf_transfer -t signal.cs8 -f 433920000 -s 2000000 -x 20 -a 0
 ```
 
-Or use the guard-railed wrapper in this folder, which enforces a frequency allow-list, a gain cap, amp off
-and a hard timeout:
+Or use the helper in this folder, which prints the file's duration, replays it N times with a gap, and can
+show the command without running it:
 
 ```bash
-python3 radios/hackrf/tools/hackrf_tx.py signal.cs8 --freq 433.92e6 --rate 2e6 --gain 20 --occupied-bw 300e3
-python3 radios/hackrf/tools/hackrf_tx.py signal.cs8 --freq 433.92e6 --rate 2e6 --repeat 3 --gap 1
-python3 radios/hackrf/tools/hackrf_tx.py --dry-run signal.cs8 --freq 433.92e6 --rate 2e6
+python3 radios/hackrf/tools/hackrf_tx.py signal.cs8 --freq 433.92e6 --rate 2e6 --gain 20
+python3 radios/hackrf/tools/hackrf_tx.py signal.cs8 --freq 915e6 --rate 8e6 --gain 30 --amp --repeat 3 --gap 1
+python3 radios/hackrf/tools/hackrf_tx.py --dry-run signal.cs8 --freq 2.44e9 --rate 10e6 --gain 40
+python3 radios/hackrf/tools/hackrf_tx.py signal.cs8 --freq 433.92e6 --rate 2e6 --extra "-b 1750000 -C 2"
 ```
 
-TX rules that keep you out of trouble:
+TX notes:
 
 1. **The file's sample rate and `-s` must match.** If they don't, the signal comes out at the wrong
    bandwidth and offset (a 100 kHz offset generated at 2 MS/s becomes 400 kHz at 8 MS/s).
@@ -175,18 +175,17 @@ TX rules that keep you out of trouble:
    You'll see a small carrier there even with an all-zero file. Measured here: centre leakage (plus the
    receiver's own DC spike) is 48–58 dB below the wanted signal, and the mirror image at −offset is
    51–57 dB below.
-4. **Start at `-x 0` to `-x 20` with `-a 0`.** At 1 m on a bench, `-x 20` gave 40–55 dB SNR on an RTL-SDR.
-   You almost never need the amp for bench work.
-5. **Always use an antenna or a 50 Ω load.** For cabled tests use ≥ 30–40 dB of attenuation before any
-   receiver.
-6. **Stay in a band you may legally use.** See
-   [../../knowledge/regulations_and_safety.md](../../knowledge/regulations_and_safety.md).
-7. **Check that nothing is still keyed up afterwards:** `pgrep -lf hackrf_transfer` must print nothing.
+4. **Output level.** TX VGA (`-x`, 0–47 dB) plus the optional amp (`-a 1`, ~+14 dB). For reference, at
+   1 m on this bench `-x 20` with the amp off gave 40–55 dB SNR on an RTL-SDR.
+5. **Load.** Transmit into an antenna or a 50 Ω load. For cabled tests, put 30–40 dB of attenuation before
+   the receiver (receiver input limits are in the spec tables).
+6. **Still running?** `pgrep -lf hackrf_transfer` lists any transmitter still active (e.g. one started with
+   `-R`).
 
 ### Quick carrier (no file)
 
 ```bash
-gtimeout 5 hackrf_transfer -c 100 -f 433920000 -s 2000000 -x 10 -a 0   # CW at exactly 433.92 MHz for <= 5 s
+hackrf_transfer -c 100 -f 433920000 -s 2000000 -x 10 -a 0   # CW at exactly 433.92 MHz until stopped
 ```
 
 ---
@@ -208,7 +207,7 @@ python3 tools/sweep_plot.py sweep_fm.csv                              # heatmap 
 | `-f min:max` | Range in **MHz** (integers) |
 | `-w <hz>` | FFT bin width, 2445 – 5,000,000 Hz |
 | `-1` | One sweep then exit |
-| `-N <n>` | Number of sweeps then exit. **Always use `-1` or `-N`** |
+| `-N <n>` | Number of sweeps then exit (without `-1`/`-N` it sweeps until stopped) |
 | `-l` / `-g` / `-a` / `-p` | LNA, VGA, amp, antenna power, as for `hackrf_transfer` |
 | `-r <file>` | Output file (default stdout) |
 | `-B` / `-I` | Binary output / binary inverse-FFT output |

@@ -14,7 +14,7 @@ Related tools elsewhere:
 | Tool | Where |
 |---|---|
 | Signal generator (`generate.py`) | [../signal_generation](../signal_generation/README.md) |
-| Guard-railed HackRF TX (`hackrf_tx.py`) | [../radios/hackrf/tools](../radios/hackrf/tools/hackrf_tx.py) |
+| HackRF TX helper (`hackrf_tx.py`) | [../radios/hackrf/tools](../radios/hackrf/tools/hackrf_tx.py) |
 | SDR++ control (`sdrppctl.py`, `sdrpp.py`) | [../software/sdr++/tools](../software/sdr++/rigctl.md) |
 | Loopback + over-the-air tests | [../tests](../tests) |
 

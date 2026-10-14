@@ -13,7 +13,7 @@ iq.save("tone.cs8", x)
 
 ```bash
 .venv/bin/python signal_generation/generate.py tone --offset 100e3 --seconds 2 -o tone.cs8
-gtimeout 10 hackrf_transfer -t tone.cs8 -f 433920000 -s 2000000 -x 20 -a 0
+hackrf_transfer -t tone.cs8 -f 433920000 -s 2000000 -x 20 -a 0
 ```
 
 Over the air on this bench, that tone arrived at **+102.18 kHz** with 53.5 dB SNR on the RTL-SDR. The
@@ -91,7 +91,7 @@ A slow sweep across the band, received on another radio, gives that radio's freq
 ## CW without a file
 
 ```bash
-gtimeout 5 hackrf_transfer -c 100 -f 433920000 -s 2000000 -x 10 -a 0
+hackrf_transfer -c 100 -f 433920000 -s 2000000 -x 10 -a 0
 ```
 
 `-c` makes the HackRF transmit a constant DC value, which appears as a carrier at exactly `-f`. Handy for

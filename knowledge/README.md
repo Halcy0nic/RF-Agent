@@ -1,7 +1,7 @@
 # Knowledge base
 
 General RF and DSP knowledge an RF agent needs: how to reason about signals, how to find and identify
-them, how to turn IQ into bits, and how to stay legal and safe while doing it. These pages are written to
+them, how to turn IQ into bits, and the regulatory and hardware facts around it. These pages are written to
 be read by an agent mid-task, so each one stands alone, is dense, and points to working code in
 [`../rfkit`](../rfkit) and [`../tools`](../tools).
 
@@ -13,9 +13,9 @@ be read by an agent mid-task, so each one stands alone, is dense, and points to 
 | [modulation_reference.md](modulation_reference.md) | Every common modulation: math, bandwidth, waterfall fingerprint, how to demodulate |
 | [demodulation_recipes.md](demodulation_recipes.md) | Step-by-step receivers (Morse, OOK, Manchester, FSK, GFSK, PSK, AM/FM) with rfkit code |
 | [signal_identification.md](signal_identification.md) | Unknown signal → what is it? Fingerprints, band plan, common signals by frequency |
-| [analysis_workflow.md](analysis_workflow.md) | The end-to-end method: survey → capture → identify → demodulate → decode, plus agent rules |
+| [analysis_workflow.md](analysis_workflow.md) | The end-to-end method: survey → capture → identify → demodulate → decode |
 | [line_coding_and_framing.md](line_coding_and_framing.md) | Recovering bytes: line codes, preambles/sync words, CRC hunting, whitening, protocol reversing |
-| [regulations_and_safety.md](regulations_and_safety.md) | What you may transmit, ISM bands, power limits, bench safety, agent guard rails |
+| [regulations_and_equipment_limits.md](regulations_and_equipment_limits.md) | Spectrum regulation reference (authorisation types, ISM bands, protected allocations), SDR emission characteristics, hardware input/bias limits |
 
 ## The grading ladder
 

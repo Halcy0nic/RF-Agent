@@ -3,8 +3,7 @@
 macOS-first (paths, `open -a`, `screencapture`). On Linux set SDRPP_CONFIG_DIR and replace launch()/grab().
 
 Isolated mode (default): SDR++ is launched with its `-r <root>` flag pointing at a private config directory
-(tmp/sdrpp/root, seeded once from your normal config). Automation never edits your own SDR++ settings, so
-there is nothing to restore afterwards. Set SDRPP_ISOLATED=0 to drive the normal config instead (then use
+(tmp/sdrpp/root, seeded once from your normal config), so the normal SDR++ config is left as it was. Set SDRPP_ISOLATED=0 to drive the normal config instead (then use
 backup_config()/restore_config()).
 
 How SDR++ behaves (and why this module looks the way it does):
@@ -46,7 +45,7 @@ from pathlib import Path
 USER_CFG_DIR = Path.home() / "Library/Application Support/sdrpp"      # SDR++'s normal config (macOS)
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
-OUT = Path(os.environ.get("SDRPP_OUT", REPO / "tmp" / "sdrpp"))      # git-ignored
+OUT = Path(os.environ.get("SDRPP_OUT", REPO / "tmp" / "sdrpp"))
 ISOLATED = os.environ.get("SDRPP_ISOLATED", "1") != "0"
 ROOT = OUT / "root"
 CFG_DIR = Path(os.environ.get("SDRPP_CONFIG_DIR", ROOT if ISOLATED else USER_CFG_DIR))

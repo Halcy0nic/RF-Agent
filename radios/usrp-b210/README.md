@@ -97,7 +97,7 @@ $EX/rx_samples_to_file --args "type=b200" --channels 0,1 --freq 2.44e9 --rate 20
 ```
 
 Key options: `--freq`, `--rate`, `--gain`, `--ant TX/RX|RX2`, `--bw`, `--type float|short|double`,
-`--nsamps N` or `--duration S` (**always bound it**), `--channels`, `--ref internal|external|gpsdo`,
+`--nsamps N` or `--duration S` (otherwise it records until stopped), `--channels`, `--ref internal|external|gpsdo`,
 `--otw sc16|sc8`, `--lo-offset`, `--stats`, `--progress`.
 
 **Use the actual rate printed in the console.** UHD coerces the requested rate to MCR/decimation. For
@@ -130,14 +130,14 @@ uhd_rx_nogui -a "type=b200" -f 162.55e6 --demod NBFM   # simple audio receiver
 
 ```bash
 EX=$(brew --prefix uhd)/lib/uhd/examples
-# Replay a complex-float file (generate with rfkit: iq.save("sig.cf32", x, peak=0.7)) — bounded with gtimeout
-gtimeout 10 $EX/tx_samples_from_file --args "type=b200" --file sig.cf32 --type float \
+# Replay a complex-float file (generate with rfkit: iq.save("sig.cf32", x, peak=0.7))
+$EX/tx_samples_from_file --args "type=b200" --file sig.cf32 --type float \
     --rate 2e6 --freq 433.92e6 --gain 40 --ant TX/RX
-# Test waveforms (CW / sine / square) — runs until killed, so always bound it
-gtimeout 5 $EX/tx_waveforms --args "type=b200" --rate 1e6 --freq 433.92e6 --gain 30 \
+# Test waveforms (CW / sine / square) — runs until stopped
+$EX/tx_waveforms --args "type=b200" --rate 1e6 --freq 433.92e6 --gain 30 \
     --wave-type SINE --wave-freq 100e3 --wave-ampl 0.3
 # GNU Radio signal generator
-gtimeout 5 uhd_siggen -a "type=b200" -f 433.92e6 -s 1e6 -g 30 --sine -x 100e3 -m 0.3
+uhd_siggen -a "type=b200" -f 433.92e6 -s 1e6 -g 30 --sine -x 100e3 -m 0.3
 ```
 
 - **Formats:** `--type float` = CF32 (`.cf32`, what rfkit writes), `short` = CS16. CS8 HackRF files must
@@ -146,9 +146,8 @@ gtimeout 5 uhd_siggen -a "type=b200" -f 433.92e6 -s 1e6 -g 30 --sine -x 100e3 -m
   much lower amplitudes than on a HackRF without losing SNR.
 - **Gain:** 0–89.75 dB. Roughly 40 dB on the bench is comparable to HackRF `-x 20`, but **measure**,
   don't assume. Start at 0 and step up while watching a receiver.
-- `--repeat` in `tx_samples_from_file` loops forever. Never use it without `gtimeout`.
-- **TX happens only on the `TX/RX` port.** Always use an antenna or a 50 Ω load. Same legal rules as the
-  HackRF: [../../knowledge/regulations_and_safety.md](../../knowledge/regulations_and_safety.md).
+- `--repeat` in `tx_samples_from_file` loops the file until stopped.
+- **TX happens only on the `TX/RX` port.** Connect an antenna or a 50 Ω load there.
 - **Full-duplex self-test:** TX on channel 0 TX/RX → 30–40 dB attenuator → channel 0 RX2. Or simply TX
   with an antenna and receive on RX2 of the other channel.
 
@@ -162,7 +161,7 @@ usrp = uhd.usrp.MultiUSRP("type=b200")
 x = usrp.recv_num_samps(2_000_000, 433.92e6, 2e6, [0], 40)   # (num, freq, rate, channels, gain) -> (chans, N) complex64
 x = x[0]
 
-# Transmit a NumPy array (blocking, bounded by its length)
+# Transmit a NumPy array (blocking, for the array's duration)
 tx = (0.5 * np.exp(2j * np.pi * 100e3 * np.arange(2_000_000) / 2e6)).astype(np.complex64)
 usrp.send_waveform(tx, 1.0, 433.92e6, 2e6, [0], 30)        # (samples, duration_s, freq, rate, chans, gain)
 ```

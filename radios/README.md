@@ -46,9 +46,9 @@ to search for it. On this bench, HackRF TX → RTL-SDR RX measured **+2.15 to +2
 **Only one program per radio.** Libusb devices are exclusive. SDR++ holding the RTL-SDR blocks `rtl_sdr`
 and `rtl_433`. `pgrep -lf "sdrpp|rtl_|hackrf_|gqrx|uhd"` shows who has it.
 
-**Bound every command.** Capture tools stream forever by default. Agents must always pass a sample count
-(`-n`, `--nsamps`, `--duration`), a sweep count (`-1`, `-N`), a timer (`-T`, `-e`) or wrap the command in
-`gtimeout N` (`brew install coreutils`; `timeout` on Linux).
+**Capture length.** Capture tools stream until stopped by default. Set the length with a sample count
+(`-n`, `--nsamps`, `--duration`), a sweep count (`-1`, `-N`) or a timer (`-T`, `-e`), or wrap the command
+in `gtimeout N` (`brew install coreutils`; `timeout` on Linux) when scripting.
 
 **File sizes.** Bytes = samples × bytes per complex sample: CS8/CU8 = 2, CS16 = 4, CF32 = 8.
 8 MS/s CS8 = 16 MB/s; 2.048 MS/s SDR++ int16 WAV = 8.2 MB/s; 20 MS/s CF32 = 160 MB/s.
@@ -56,7 +56,7 @@ and `rtl_433`. `pgrep -lf "sdrpp|rtl_|hackrf_|gqrx|uhd"` shows who has it.
 ## Typical bench workflow
 
 ```text
-signal_generation/generate.py  ──► signal.cs8 ──► radios/hackrf/tools/hackrf_tx.py (bounded, low power)
+signal_generation/generate.py  ──► signal.cs8 ──► radios/hackrf/tools/hackrf_tx.py
                                                          │ air (~1 m)
 SDR++ (RTL-SDR source) ◄── rigctl :4532 ◄── software/sdr++/tools/sdrppctl.py capture ...
         └── baseband WAV ──► tools/iq_inspect.py / tools/rx_decode.py ──► decoded payload

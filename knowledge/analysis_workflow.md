@@ -1,13 +1,12 @@
-# Analysis workflow (and rules for agents)
+# Analysis workflow
 
-The method that works, end to end, plus the operating rules an autonomous agent must follow when it
-controls real radios.
+The method that works, end to end, for finding, capturing and decoding signals with real radios.
 
 ## The loop
 
 ```text
 1. SURVEY      where is the energy?           hackrf_sweep / rtl_power → tools/sweep_plot.py
-2. CAPTURE     record IQ, short and bounded    SDR++ rigctl recorder, rtl_sdr -n, hackrf_transfer -n
+2. CAPTURE     record IQ                       SDR++ rigctl recorder, rtl_sdr -n, hackrf_transfer -n
 3. INSPECT     look before you decode          tools/iq_inspect.py → overview PNG + JSON
 4. IDENTIFY    what modulation/protocol?       knowledge/signal_identification.md, rtl_433 -A
 5. DEMODULATE  waveform → symbols → bits       knowledge/demodulation_recipes.md, tools/rx_decode.py
@@ -75,29 +74,15 @@ multimodal model:
 
 The model proposes and the IQ measurements decide.
 
-## Rules for an agent driving radios
+## Practical notes
 
-These are mandatory.
-
-1. **Every command is bounded.** `-n` samples, `-1`/`-N` sweeps, `-T`/`-e` timers, `--duration`, or
-   `gtimeout N`. Never start a stream that runs until killed. Never use `hackrf_transfer -R` without
-   `gtimeout`.
-2. **Transmit only when the human has approved it, on approved frequencies, at the approved power.** On
-   this bench (approved 2026-10-14): HackRF TX at **433.92 MHz** only, **TX gain ≤ 20, amp off**, short
-   bursts. Use `radios/hackrf/tools/hackrf_tx.py`, which enforces it. Anything else: ask first.
-3. **Verify nothing is left transmitting**: `pgrep -lf hackrf_transfer` must be empty after every TX.
-4. **One program per radio.** Check `pgrep -lf "sdrpp|rtl_|hackrf_|gqrx|uhd"` before opening a device. Close
-   what you opened.
-5. **Don't clobber the user's software config.** Drive SDR++ in isolated mode (`-r tmp/sdrpp/root`, the
-   default in `software/sdr++/tools/sdrpp.py`). If you must touch the real config, back it up first and
-   restore it after.
-6. **Scratch goes in `tmp/`** (git-ignored). Recordings are large. Delete them when done, and never commit
-   IQ files.
-7. **Measure, don't assume.** Report SNR, frequency error and bandwidth from data, and say what wasn't
-   verified (e.g. "B210 docs not hardware-tested").
-8. **Receiving is passive, but decoding has rules too.** Don't decode or publish the contents of private
-   communications (cellular, pagers carrying personal data, encrypted traffic). Many jurisdictions
-   restrict *divulging* intercepted content even when receiving is legal. See
-   [regulations_and_safety.md](regulations_and_safety.md).
-9. **Public repo hygiene.** Don't commit captures of other people's signals, device serials beyond your
-   own, credentials, or private challenge material.
+- **One program per radio.** Libusb devices are exclusive. `pgrep -lf "sdrpp|rtl_|hackrf_|gqrx|uhd"` shows
+  what is holding a device.
+- **Capture length.** Streaming tools run until stopped unless given `-n`, `-1`/`-N`, `-T`/`-e` or
+  `--duration`.
+- **Transmitter still running?** `pgrep -lf hackrf_transfer`.
+- **SDR++ config.** `software/sdr++/tools/sdrpp.py` runs SDR++ with its own config root
+  (`-r tmp/sdrpp/root`) by default; `SDRPP_ISOLATED=0` uses the normal config directory.
+- **Recordings are large** (see [iq_and_sampling.md](iq_and_sampling.md) for data rates). The repo's
+  `.gitignore` excludes IQ formats and `tmp/`.
+- **Measure, don't assume.** Report SNR, frequency error and bandwidth from data.
