@@ -4,10 +4,6 @@ Documentation, knowledge and working tools for an all-purpose AI agent that auto
 engineering, signal analysis, digital signal processing and signal synthesis** with real software-defined
 radios.
 
-Everything here is meant to be read and executed by an agent (and by people): dense reference pages,
-copy-paste commands, and Python tools that emit JSON and PNGs. The tools were verified on a real
-bench: HackRF One + RTL-SDR Blog V4 + SDR++ 1.3.0 on macOS, 2026-10-14.
-
 ## Layout
 
 | Folder | Contents |
