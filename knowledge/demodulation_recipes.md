@@ -12,6 +12,13 @@ x = x[int(0.05 * fs):]                  # drop the receiver's settling transient
 plot.overview(x, fs, "overview.png")    # ALWAYS look first
 ```
 
+![Demodulation steps on real captures](images/demod_steps.png)
+
+*Intermediate signals from the recipes below, computed from over-the-air captures: an OOK envelope with
+its Otsu threshold (the `AA AA` preamble then the `2D D4` sync), the 2-FSK discriminator before and after
+post-detection filtering, QPSK symbols after carrier/timing recovery (four clusters, ~17 dB SNR), and a
+Morse envelope decoded to "RF AGENT TEST".*
+
 ## 0. Find the signal (every recipe starts here)
 
 ```python

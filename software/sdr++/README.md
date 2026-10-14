@@ -37,6 +37,26 @@ Radio or SDRangel for the B210 there.
 
 ## 2. UI tour (what each control maps to)
 
+![SDR++ UI, annotated](images/ui_tour_annotated.png)
+
+*Real screenshot from this bench: RTL-SDR at 433.92 MHz, 1.024 MS/s, gain 37.2 dB; VFO in NFM on a HackRF
+test transmission at +100 kHz. FSK packets sent first have scrolled down the waterfall; the NFM carrier is
+on now.*
+
+| # | Element | # | Element |
+|---|---|---|---|
+| 1 | Menu (show/hide side panel) | 10 | Demod bandwidth |
+| 2 | Start/stop source | 11 | Recorder (collapsed) |
+| 3 | Audio mute + volume | 12 | Spectrum (FFT) with dB scale |
+| 4 | Frequency display (VFO, or centre with no VFO) | 13 | VFO: grey band = demod bandwidth, red line = tuned frequency |
+| 5 | Tuning mode (centre follows VFO / free VFO) | 14 | Waterfall: newest line at the top |
+| 6 | SNR meter for the VFO | 15 | Zoom, Max and Min (dB display range) sliders |
+| 7 | Source panel: device, rate, PPM, gain, AGCs, IQ options | 16 | FSK packets from earlier, scrolling down |
+| 8 | RTL gain (37.2 dB = index 20) | 17 | Spurs appearing only while the strong carrier is on: overload/TX products. Lower RX gain or TX power and they drop |
+| 9 | Radio panel: demod mode | | |
+
+Schematic of the same layout:
+
 ```text
 ┌ ☰ ■/▶ 🔊 volume   000.433.920.000  ⇆                      SNR meter ───────────────┐
 │ Source ▾          │  FFT / spectrum  (dB vs frequency)                      Zoom  │
@@ -149,7 +169,8 @@ by the RTL-SDR in SDR++ (1.024 MS/s, FFT 8192 @ 30 fps). Captured by `tests/ota_
 | RAW | — | Outputs the IQ as stereo audio (I = left, Q = right). Handy to pipe narrowband IQ elsewhere |
 
 Each mode keeps its own settings in `radio_config.json` (bandwidth, squelch, noise blanker,
-de-emphasis...). Over rigctl: `M <mode> <bw>` (e.g. `M NFM 12500`) once a VFO is selected for rigctl.
+de-emphasis...). Over rigctl: `M <mode> <bw>` once a VFO is selected for rigctl. Use Hamlib names: `M FM 12500`
+selects SDR++'s NFM (`M NFM` is rejected with `RPRT 1`).
 
 ---
 
@@ -237,7 +258,7 @@ $P $T setup --source HackRF --freq 98e6 --rate 8e6 --lna 24 --vga 20
 $P $T setup --freq 98.1e6 --rate 2.048e6 --radio                 # keep the Radio VFO (for M / audio)
 $P $T status                                                      # running? rigctl? freq/mode/config dir
 $P $T tune 433.95e6                                               # F <hz>
-$P $T rig "M NFM 12500"                                           # any rigctl command
+$P $T rig "M FM 12500"                                            # any rigctl command (FM = NFM)
 $P $T record 5 --out tmp/sdrpp/caps/test.wav                      # baseband WAV
 $P $T shot tmp/sdrpp/shots/now.png                                # window screenshot
 $P $T analyze tmp/sdrpp/caps/test.wav --png tmp/sdrpp/caps/test.png

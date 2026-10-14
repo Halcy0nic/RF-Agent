@@ -54,6 +54,10 @@ deviation.
 Over the air on this bench: a 1 kHz tone at 5 kHz deviation came back as a 1000.0 Hz dominant audio
 frequency after `rx_decode.py fm --nfm`.
 
+![NFM audio recovered over the air](images/nfm_audio_ota.png)
+
+*Demodulated audio from the received NFM test: a clean 1 kHz sine, with a 3rd harmonic about 45 dB down.*
+
 ## SSB
 
 SSB removes the carrier and one sideband, so the occupied bandwidth equals the audio bandwidth. In complex

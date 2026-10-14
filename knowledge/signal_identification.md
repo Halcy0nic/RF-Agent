@@ -5,6 +5,13 @@
 Three visual dimensions: **brightness = power, horizontal = frequency, vertical = time.** The spectrum
 answers "where in frequency", the waterfall "when and how".
 
+![Waterfall fingerprints: real over-the-air captures](images/waterfall_fingerprints.png)
+
+*Twelve modulations generated with `signal_generation/generate.py`, transmitted by the HackRF at
+433.92 MHz and received by the RTL-SDR (1.024 MS/s). Frequency across, time down. Note the per-panel
+scales: Morse/AM/NFM span seconds and a few kHz; PSK and CSS span milliseconds and ±60–80 kHz. Rebuild
+with `tests/make_doc_images.py`.*
+
 | Looks like | Probably |
 |---|---|
 | Thin solid vertical line, constant | Unmodulated carrier, a spur (check: does it move with the antenna?), a beacon, PLL leakage |

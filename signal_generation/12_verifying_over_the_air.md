@@ -11,10 +11,14 @@ SDR++ (RTL-SDR Blog V4, 1.024 MS/s, gain idx 20 = 37.2 dB, isolated config) ◄�
 ```
 
 ```bash
-.venv/bin/python tests/ota_test.py                 # all ten cases, ~3 minutes
+.venv/bin/python tests/ota_test.py                 # all 13 cases (10 decoded, 3 visual), ~4 minutes
 .venv/bin/python tests/ota_test.py ook fsk         # filter by name
 .venv/bin/python tests/ota_test.py --tx-gain 10    # weaker link
 ```
+
+`python tests/make_doc_images.py` then rebuilds every figure in `knowledge/images/` and
+`signal_generation/images/` from these captures. Chirp, CSS and AM were captured in a later run (same
+settings) for those figures.
 
 Outputs in `tmp/ota/`: `<case>.cs8` (transmitted), `<case>.wav` (received), `<case>.png` (analysis),
 `<case>_sdrpp.png` (SDR++ window), `<case>.json` (decoder output), `summary.json`.
@@ -33,6 +37,9 @@ Outputs in `tmp/ota/`: `<case>.cs8` (transmitted), `<case>.wav` (received), `<ca
 | qpsk | `psk --scheme qpsk --rate 50e3 --repeat 3` | **PASS** 3/3 | 16.9 dB | `QPSK HELLO` ×3 |
 | nfm | `fm --audio-tone 1000 --dev 5e3` | **PASS** | 45.3 dB | 1000.0 Hz audio tone |
 | text | `text --text "RF AGENT" --bw 150e3` | readable upright in SDR++ | 26.8 dB | (visual: see [09](09_waterfall_art.md)) |
+| chirp | `chirp --f0 -100e3 --f1 100e3 --seconds 0.05 --repeat 20` | visual | 24.2 dB | see [08](08_chirps_spread_ofdm.md) |
+| css | `css --sf 8 --bw 125e3 --repeat 4` | visual | 21.3 dB | see [08](08_chirps_spread_ofdm.md) |
+| am | `am --audio-tone 800` | visual | 49.4 dB | carrier + ±800 Hz sidebands |
 
 The SNR column is the strongest PSD bin over the noise floor across the 1.024 MHz span. Wideband signals
 spread their power over more bins, which is why PSK reads lower; it's not a weaker link.

@@ -4,6 +4,7 @@
     python tests/ota_test.py                 # all cases
     python tests/ota_test.py ook fsk         # name filter
     python tests/ota_test.py --tx-gain 10
+    python tests/make_doc_images.py          # afterwards: rebuild the doc figures from tmp/ota/*.wav
 
 Needs: HackRF + RTL-SDR attached, SDR++ installed, antennas (or an attenuated cable) on both radios.
 Transmits ONLY inside 433.05-434.79 MHz at low TX gain via radios/hackrf/tools/hackrf_tx.py (guard-railed).
@@ -48,6 +49,11 @@ CASES = {
               ["psk", "--rate", "50e3", "--order", "4"], "QPSK HELLO"),
     "nfm":   (["fm", "--audio-tone", "1000", "--dev", "5e3", "--seconds", "1.5"], ["fm", "--nfm"], '"dominant_audio_hz": 1'),
     "text":  (["text", "--text", "RF AGENT", "--bw", "150e3"], None, None),
+    "chirp": (["chirp", "--f0", "-100e3", "--f1", "100e3", "--seconds", "0.05", "--repeat", "20", "--gap", "0.03"],
+              None, None),
+    "css":   (["css", "--sf", "8", "--bw", "125e3", "--values", "0,64,128,192,32,224", "--repeat", "4",
+               "--gap", "0.1"], None, None),
+    "am":    (["am", "--audio-tone", "800", "--seconds", "1.5"], None, None),
 }
 
 

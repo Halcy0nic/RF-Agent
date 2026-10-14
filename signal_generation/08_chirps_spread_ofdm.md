@@ -19,6 +19,11 @@ x = mod.repeat_burst(c, 20, 0.01, fs)          # radar-like pulse train
 .venv/bin/python signal_generation/generate.py chirp --f0 -200e3 --f1 200e3 --seconds 0.01 --repeat 20 --gap 0.01 -o chirp.cs8
 ```
 
+![Chirps over the air](images/chirp_ota_waterfall.png)
+
+*Received over the air: `chirp --f0 -100e3 --f1 100e3 --seconds 0.05 --repeat 20 --gap 0.03`. With time
+running down, each up-chirp is a line sloping from top-left to bottom-right.*
+
 Waterfall: diagonal lines. Radar uses chirps (pulse compression: a matched filter squeezes a long chirp
 into a sharp peak), as do sounders and LoRa.
 
@@ -35,6 +40,12 @@ frame = mod.css_frame([1, 2, 3, 100], sf=7, bw=125e3, fs=500e3)    # 8 up-chirps
 ```bash
 .venv/bin/python signal_generation/generate.py css --sf 7 --bw 125e3 --values 1,2,3,100 --fs 2e6 -o css.cs8
 ```
+
+![LoRa-style CSS frame over the air](images/css_ota_waterfall.png)
+
+*One received SF8/125 kHz frame: eight preamble up-chirps (2.05 ms each), the down-chirp sync around
+27–32 ms, then data symbols whose chirps start at different frequencies (the cyclic shift is the symbol
+value).*
 
 | SF | Symbol time at BW 125 kHz | Raw bit rate (SF bits / symbol) |
 |---|---|---|

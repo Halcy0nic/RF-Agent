@@ -156,6 +156,12 @@ rtl_power -f 24M:1.7G:1M -i 5m -1 -c 25% survey.csv            # everything, 5-m
 python3 tools/sweep_plot.py fm_band.csv                         # heatmap PNG + strongest frequencies
 ```
 
+![rtl_power while the HackRF sends OOK bursts](images/rtl_power_433.png)
+
+*`rtl_power -f 433.5M:434.5M:2k -g 37 -i 1 -e 25` while the HackRF transmitted 40 OOK packets at
+433.92 MHz + 100 kHz (sweeps 3–19). `sweep_plot.py` reports 434.0225 MHz, 37.8 dB over the floor, duty 0.68.
+The faint lines near 433.92 MHz are the HackRF's LO leakage and spurs.*
+
 Same CSV layout as `hackrf_sweep`: `date, time, hz_low, hz_high, hz_step, samples, dB, dB, ...`. It is much
 slower than `hackrf_sweep` (the dongle retunes every ~2 MHz), but you can leave it running for days.
 Options: `-i` integration time, `-1` single shot, `-e` exit timer (`30m`, `1h`), `-c` crop percentage

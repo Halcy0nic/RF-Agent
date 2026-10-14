@@ -87,7 +87,7 @@ isn't installed: `rigctl -m 2 -r localhost:4532 F 433920000`.
 |---|---|---|
 | `F <hz>` / `\set_freq <hz>` | `RPRT 0` | **With a VFO selected:** moves that VFO. If it leaves the visible span, SDR++ retunes the centre so the VFO is back in view (tested: VFO 433.95 → 440 MHz with a 1.024 MHz span). **With no VFO (`vfo: ""`):** sets the centre frequency directly |
 | `f` / `\get_freq` | `433920000` | VFO frequency (VFO mode) or centre frequency (no VFO) |
-| `M <mode> <bw>` / `\set_mode` | `RPRT 0` / `RPRT 1` | Mode ∈ `NFM`/`FM`, `WFM`, `AM`, `DSB`, `USB`, `LSB`, `CW`, `RAW`; `bw` in Hz (`0` = keep). Needs a VFO. Tested: `M FM 12500`, `M WFM 200000` OK; `M BOGUS 0` → `RPRT 1`; with no VFO → `RPRT 1` |
+| `M <mode> <bw>` / `\set_mode` | `RPRT 0` / `RPRT 1` | Hamlib mode names: **`FM` (= SDR++ NFM)**, `WFM`, `AM`, `DSB`, `USB`, `LSB`, `CW`, `RAW`; `bw` in Hz (`0` = keep). Needs a VFO. Tested: `M FM 12500`, `M WFM 200000` OK; **`M NFM ...` → `RPRT 1`** (not a Hamlib name); `M BOGUS 0` → `RPRT 1`; with no VFO → `RPRT 1`. `M FM 60000` set 50 kHz (FM bandwidth is clamped) |
 | `m` / `\get_mode` | `WFM` + `200000` | Mode and bandwidth. With no VFO: `RAW` + `0` |
 | `v` / `\get_vfo` | `VFO` | Fixed name |
 | `V <vfo>` / `\set_vfo` | `RPRT 0` | Accepted, no effect (single VFO) |

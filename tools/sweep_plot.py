@@ -6,7 +6,9 @@
     sweep_plot.py sweep.csv [--png sweep.png] [--top 15]
 
 Both tools write the same row layout:  date, time, hz_low, hz_high, hz_bin_width, num_samples, dB, dB, ...
-Rows with the same timestamp are one sweep; they are stitched into one spectrum per sweep.
+A new sweep starts when a row's frequency slice (hz_low) repeats within the current sweep. That works for
+rtl_power and for hackrf_sweep, which emits its 5 MHz slices out of order and (without -n) with
+different timestamps per row.
 """
 from __future__ import annotations
 
@@ -22,12 +24,17 @@ import numpy as np
 
 def load(path):
     sweeps: "OrderedDict[str, dict]" = OrderedDict()
+    seen: set = set()
+    ts = None
     with open(path) as f:
         for row in csv.reader(f):
             if len(row) < 7:
                 continue
-            ts = row[0].strip() + " " + row[1].strip()
             lo, hi, step = float(row[2]), float(row[3]), float(row[4])
+            if ts is None or lo in seen:                    # slice repeats: a new sweep has started
+                ts = f"{row[0].strip()} {row[1].strip()} #{len(sweeps)}"
+                seen = set()
+            seen.add(lo)
             vals = [float(v) for v in row[6:] if v.strip() not in ("", "nan", "-nan")]
             freqs = lo + step * (np.arange(len(vals)) + 0.5)
             d = sweeps.setdefault(ts, {})

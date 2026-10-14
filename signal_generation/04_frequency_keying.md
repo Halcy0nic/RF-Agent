@@ -56,6 +56,13 @@ x = mod.gmsk(bits_, fs, rate, bt=0.3)               # GMSK = MSK + Gaussian
 .venv/bin/python signal_generation/generate.py fsk --bt 0.5 --text "HELLO" --rate 10000 --dev 10e3 -o gfsk.cs8
 ```
 
+| 2-FSK, h = 8 (±20 kHz at 5 kBd) | GFSK BT 0.5, h = 2 (±10 kHz at 10 kBd) |
+|---|---|
+| ![2-FSK packet](images/fsk_ota_waterfall.png) | ![GFSK packet](images/gfsk_ota_waterfall.png) |
+
+*One received packet of each. With a large index the two tones stand apart as rails. With Gaussian
+shaping and a smaller index, the energy fills one smooth hump between ±deviation.*
+
 Trade-off: smoothing spreads each bit's frequency into its neighbours (intersymbol interference). With a
 low BT, a lone 1 between 0s never reaches full deviation. Receivers need decent timing recovery: on this
 bench, a fixed-clock slicer with a 0.8 % rate error lost the end of 120-bit GFSK packets, and the PLL

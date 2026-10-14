@@ -13,7 +13,8 @@ How SDR++ behaves (and why this module looks the way it does):
     is overwritten when it exits.
   * Runtime control goes through the Rigctl Server module (Hamlib rigctld protocol, TCP localhost:4532):
         F <hz> | f                 set / get frequency (VFO or, with no VFO selected, the centre frequency)
-        M <mode> <bw> | m          set / get demod mode of the selected Radio VFO (FM WFM AM DSB USB LSB CW RAW)
+        M <mode> <bw> | m          set / get demod mode of the selected Radio VFO (Hamlib names: FM (= NFM),
+                                   WFM AM DSB USB LSB CW RAW; "NFM" is rejected)
         \\start | \\stop             start / stop the source (same as the play button)
         \\recorder_start | \\recorder_stop   (aliases AOS / LOS) start / stop the Recorder module
         \\dump_state, \\chk_vfo, \\get_powerstat, q | \\quit
@@ -308,7 +309,8 @@ def get_freq() -> float:
 
 
 def set_mode(mode: str, bandwidth_hz: int = 0) -> str:
-    """Needs a Radio VFO selected for rigctl (profile radio=True). Modes: FM WFM AM DSB USB LSB CW RAW."""
+    """Needs a Radio VFO selected for rigctl (profile radio=True). Hamlib modes: FM (SDR++ NFM), WFM, AM, DSB,
+    USB, LSB, CW, RAW. "NFM" itself is rejected with RPRT 1."""
     return rig(f"M {mode} {int(bandwidth_hz)}")
 
 

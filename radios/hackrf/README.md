@@ -222,8 +222,15 @@ date, time, hz_low, hz_high, hz_bin_width, num_samples, dB, dB, dB, ...
 2026-10-14, 12:53:54.184327, 88000000, 93000000, 98039.22, 204, -71.73, -77.66, ...
 ```
 
-Each row covers a 5 MHz slice. All rows with the same timestamp make one sweep. The dB values are
-**relative** (uncalibrated). Compare them with each other, not with a power meter.
+Each row covers a 5 MHz slice. hackrf_sweep emits the slices out of order and, without `-n`, with
+different timestamps, so `tools/sweep_plot.py` starts a new sweep whenever a slice repeats. The dB values
+are **relative** (uncalibrated). Compare them with each other, not with a power meter.
+
+![hackrf_sweep of the 2.4 GHz ISM band](images/hackrf_sweep_2g4.png)
+
+*`hackrf_sweep -f 2400:2500 -w 250000 -l 32 -g 24 -N 150` on this bench, plotted with `tools/sweep_plot.py`
+(top: max-hold and mean; bottom: one row per sweep). Wi-Fi bursts occupy 2.40–2.44 GHz; the narrow line at
+2.480 GHz is consistent with BLE advertising channel 39. 150 sweeps took a few seconds.*
 
 ---
 
