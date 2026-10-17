@@ -78,6 +78,6 @@ wait; $P tools/rx_decode.py ook tmp/rx.cu8 --fs 1.024e6
 ## Software-only verification (no radios)
 
 ```bash
-.venv/bin/python tests/test_loopback.py      # 16 tests: every modulator through noise + CFO + delay → decoder
+.venv/bin/python tests/test_loopback.py      # 17 tests: every modulator through noise + CFO + delay → decoder
 $P tools/rx_decode.py fsk tmp/fsk.cs8 --fs 2e6   # any generated file decodes as-is
 ```

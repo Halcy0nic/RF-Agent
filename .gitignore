@@ -46,7 +46,7 @@ survey_*.csv
 !**/images/*.png
 
 # Compiled helpers
-software/sdr++/tools/winlist
+tools/winlist
 
 # ---- OS / editors ----
 .DS_Store

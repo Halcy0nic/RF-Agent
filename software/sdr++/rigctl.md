@@ -182,11 +182,12 @@ decimation/VFO-width segfault. Pass `radio=True` (`--radio`) when you need demod
 ## 5. Signal images (waterfall screenshots)
 
 macOS `screencapture -l <windowID>` grabs one window, even if it's partly covered. The window ID comes
-from CoreGraphics. `tools/winlist.swift` prints the largest window owned by a process:
+from CoreGraphics. The repo's [`tools/winlist.swift`](../../tools/winlist.swift) (shared with the SDRangel tool)
+prints the largest window owned by a process (name matched case-insensitively):
 
 ```bash
-swiftc -O software/sdr++/tools/winlist.swift -o software/sdr++/tools/winlist   # sdrpp.py does this on first use
-software/sdr++/tools/winlist "SDR++"            # -> "<windowID> <x> <y> <w> <h>"
+swiftc -O tools/winlist.swift -o tools/winlist   # sdrpp.py does this on first use
+tools/winlist "SDR++"                            # -> "<windowID> <x> <y> <w> <h>"
 screencapture -x -o -l <windowID> shot.png       # -x no sound, -o no shadow
 ```
 

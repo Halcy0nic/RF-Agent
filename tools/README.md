@@ -16,10 +16,17 @@ Related tools elsewhere:
 | Signal generator (`generate.py`) | [../signal_generation](../signal_generation/README.md) |
 | HackRF TX helper (`hackrf_tx.py`) | [../radios/hackrf/tools](../radios/hackrf/tools/hackrf_tx.py) |
 | SDR++ control (`sdrppctl.py`, `sdrpp.py`) | [../software/sdr++/tools](../software/sdr++/rigctl.md) |
+| SDRangel control (`sdrangelctl.py`) | [../software/sdrangel](../software/sdrangel/README.md) |
+| B210 setup / RX / TX / GNU Radio capture | [../radios/usrp-b210/tools](../radios/usrp-b210/README.md) |
+| [`winlist.swift`](winlist.swift) | macOS window ID by app name (case-insensitive) for `screencapture -l`; built on first use by the SDR++/SDRangel tools |
 | Loopback + over-the-air tests | [../tests](../tests) |
 
-All inputs: `.cs8 .cu8 .cs16 .cf32 .wav (2-ch IQ) .sigmf-data`. Raw formats need `--fs`. WAV/SigMF carry
-the rate. SDR++ file names also give the centre frequency.
+All inputs: `.cs8 .cu8 .cs16 .cs32 .cf32 .wav (2-ch IQ) .sigmf-data`. Raw formats need `--fs` unless a
+`<name>.sigmf-meta` sidecar sits next to them (`b210_rx.py` writes one). WAV/SigMF carry the rate.
+SDR++ file names and SigMF sidecars also give the centre frequency.
+
+`rx_decode.py` subtracts the mean (DC offset) before decoding (`--keep-dc` to disable). A HackRF
+receiver's DC offset was as strong as a received FSK burst and pulled the FSK centre estimate onto 0 Hz.
 
 `rx_decode.py` packet framing is the repo default: preamble `AA AA`, sync `2D D4`, length byte, payload,
 CRC-16/CCITT-FALSE. Pass `--whiten` for PN9-whitened frames and `--manchester` for Manchester OOK.

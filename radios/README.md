@@ -6,7 +6,7 @@ Usage documentation for each SDR on the bench, plus the concepts that apply to a
 |---|---|---|---|
 | HackRF One | [hackrf/](hackrf/README.md) | Transmitter (replays generated IQ), wideband RX, fast sweeper | Attached, verified 2026-10-14 |
 | RTL-SDR Blog V4 | [rtl-sdr/](rtl-sdr/README.md) | Receiver for verification, SDR++ source, `rtl_433`/`rtl_power` | Attached, verified 2026-10-14 |
-| Ettus USRP B210 | [usrp-b210/](usrp-b210/README.md) | Full-duplex 2×2 MIMO TX/RX | Not attached. Docs checked against UHD 4.10 tools only |
+| USRP B210 (OpenSourceSDRLab Artix-7) | [usrp-b210/](usrp-b210/README.md) | Full-duplex 2×2 MIMO TX/RX, SDRangel source | Attached, verified 2026-10-17 (RX, TX, duplex, Python, SDRangel) |
 
 ## Side-by-side
 
@@ -18,9 +18,9 @@ Usage documentation for each SDR on the bench, plus the concepts that apply to a
 | ADC bits | 8 | 8 | 12 |
 | Native file format | CU8 (`rtl_sdr`) | CS8 (`hackrf_transfer`) | CF32 / CS16 (`rx_samples_to_file`) |
 | Gain control | 29 steps 0–49.6 dB | Amp 0/14, LNA 0–40/8, VGA 0–62/2 (RX); Amp + VGA 0–47 (TX) | 0–76 dB RX, 0–89.75 dB TX |
-| Frequency accuracy | 1 ppm TCXO | ~10–20 ppm crystal (10 MHz CLKIN) | 2 ppm TCXO, GPSDO option, 10 MHz/PPS in |
+| Frequency accuracy | 1 ppm TCXO | ~10–20 ppm crystal (10 MHz CLKIN); this unit measured ~+1 ppm | 0.5 ppm TCXO (Artix board; Ettus 2 ppm + GPSDO option), 10 MHz/PPS in |
 | Max safe input | ~−10 dBm (damage ~+10 dBm) | −5 dBm | 0 dBm (linear below ~−15 dBm) |
-| Host link | USB 2 | USB 2 | USB 3 |
+| Host link | USB 2 | USB 2 | USB 3 (measured clean: 30.72 MS/s 1 ch, 15.36 MS/s 2 ch, 20/20 duplex; sc8 to 56 MS/s) |
 | Host library | librtlsdr | libhackrf | UHD |
 | SoapySDR driver | `rtlsdr` | `hackrf` | `uhd` |
 
@@ -60,6 +60,10 @@ signal_generation/generate.py  ──► signal.cs8 ──► radios/hackrf/tool
                                                          │ air (~1 m)
 SDR++ (RTL-SDR source) ◄── rigctl :4532 ◄── software/sdr++/tools/sdrppctl.py capture ...
         └── baseband WAV ──► tools/iq_inspect.py / tools/rx_decode.py ──► decoded payload
+
+B210:  radios/usrp-b210/tools/b210_rx.py / b210_tx.py   (UHD CLI, .cf32 + .sigmf-meta)
+       software/sdrangel/tools/sdrangelctl.py          (SDRangel REST: tune, record SigMF, screenshot)
 ```
 
-`tests/ota_test.py` runs this whole loop for ten modulations and checks every decode.
+`tests/ota_test.py` runs the HackRF → RTL-SDR/SDR++ loop for ten modulations and checks every decode.
+`tests/ota_b210.py` does the same between the HackRF and the B210, in both directions.

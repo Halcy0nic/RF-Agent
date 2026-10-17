@@ -38,17 +38,28 @@ Three ways: generate repeats into the file (`generate.py --repeat N --gap S`), r
   average power simply ends up lower. Raise `-x` to compensate rather than clipping.
 - Signs of overdrive at the receiver: harmonics/odd spurs, a widened spectrum, constellation compression.
 
-## USRP B210 (CF32/CS16)
+## USRP B210
+
+`radios/usrp-b210/tools/b210_tx.py` plays any file `generate.py` makes (it converts `.cs8` to complex float):
 
 ```bash
-EX=$(brew --prefix uhd)/lib/uhd/examples
-.venv/bin/python -c "from rfkit import iq; x,_=iq.load('signal.cs8', fs=2e6); iq.save('signal.cf32', x, peak=0.7)"
-$EX/tx_samples_from_file --args type=b200 --file signal.cf32 --type float \
-    --rate 2e6 --freq 433.92e6 --gain 40 --ant TX/RX
+P=.venv/bin/python
+$P radios/usrp-b210/tools/b210_tx.py signal.cs8 --freq 433.92e6 --rate 2e6 --gain 50                 # TRX1
+$P radios/usrp-b210/tools/b210_tx.py signal.cs8 --freq 433.92e6 --rate 2e6 --gain 50 --channel 1     # TRX2
 ```
 
-TX gain is 0–89.75 dB. Start low and measure. See [../radios/usrp-b210/README.md](../radios/usrp-b210/README.md).
-(Not verified on this bench: no B210 attached.)
+| Parameter | Notes |
+|---|---|
+| `--rate` = the rate you generated at | Same rule as the HackRF |
+| `--gain` (0–89.75 dB) | Measured at ~1 m into a HackRF: 40 → 44.5 dB SNR, 50 → 54.4 dB, 60 → 57.2 dB. **Gain 50 ≈ HackRF `-x 20`** |
+| `--channel 0/1` | TX comes out of that channel's `TX/RX` port (TRX1 / TRX2 on the Artix-7 board) |
+| `--peak` | Rescale to this fraction of full scale (default 0.7). The 12-bit DAC keeps SNR at lower levels than the HackRF |
+| start-up | ~3 s of device set-up (firmware, FPGA, LO lock) before RF comes out |
+
+Over the air into the HackRF at gain 50, all nine decodable cases (Morse, OOK, Manchester, FSK, GFSK, BPSK,
+QPSK, NFM) decoded: `python tests/ota_b210.py --dir b210tohackrf --tx-gain 50`. Raw UHD equivalent:
+`$(brew --prefix uhd)/lib/uhd/examples/tx_samples_from_file --args type=b200 --file signal.cf32 --type float
+--rate 2e6 --freq 433.92e6 --gain 50 --ant TX/RX`. See [../radios/usrp-b210/README.md](../radios/usrp-b210/README.md).
 
 ## Streaming instead of files
 
@@ -71,7 +82,7 @@ Pre-generating to a file is more reliable.
 ## Checking for a running transmitter
 
 ```bash
-pgrep -lf hackrf_transfer || echo "nothing transmitting"
+pgrep -lf "hackrf_transfer|tx_samples_from_file|tx_waveforms" || echo "nothing transmitting"
 ```
 
 ## Field notes from this bench

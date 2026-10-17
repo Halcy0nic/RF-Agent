@@ -1,11 +1,12 @@
 import CoreGraphics
 import Foundation
-// Prints "<windowID> <x> <y> <w> <h>" for the largest on-screen window owned by the given process name.
+// Prints "<windowID> <x> <y> <w> <h>" for the largest window owned by the given app/process name
+// (case-insensitive, e.g. "SDR++", "SDRangel"/"sdrangel").
 // Build: swiftc -O winlist.swift -o winlist      Use: ./winlist "SDR++"  ->  screencapture -l <windowID> out.png
-let owner = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "SDR++"
+let owner = (CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "SDR++").lowercased()
 let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as! [[String: Any]]
 var best: (Int, CGRect)? = nil
-for w in list where (w[kCGWindowOwnerName as String] as? String) == owner {
+for w in list where ((w[kCGWindowOwnerName as String] as? String) ?? "").lowercased() == owner {
     let id = w[kCGWindowNumber as String] as! Int
     let b = CGRect(dictionaryRepresentation: w[kCGWindowBounds as String] as! CFDictionary)!
     if best == nil || b.width * b.height > best!.1.width * best!.1.height { best = (id, b) }

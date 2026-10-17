@@ -13,7 +13,7 @@ GUI. An agent drives it without a mouse through config files + rigctl + screensh
 |---|---|
 | this page | Install, UI tour, sources, display, demodulators, recorder, config files, CLI flags, server mode |
 | [rigctl.md](rigctl.md) | Remote control: rigctl server/client, every command (verified), recording automation, screenshots, gotchas |
-| [tools/](tools/) | `sdrpp.py` (Python control module), `sdrppctl.py` (CLI), `winlist.swift` (window ID for screenshots) |
+| [tools/](tools/) | `sdrpp.py` (Python control module), `sdrppctl.py` (CLI). Screenshots use the shared [`../../tools/winlist.swift`](../../tools/winlist.swift) |
 
 ---
 
@@ -30,8 +30,8 @@ Modules shipped in this macOS build (`/Applications/SDR++.app/Contents/Plugins`)
 AirspyHF, BladeRF, FobosSDR, **HackRF**, Hermes, HydraSDR, LimeSDR, PlutoSDR, RFNM, RFspace,
 **RTL-SDR**, **RTL-TCP**, SDRplay, **SDR++ Server**, SpyServer, File, Network; plus `radio`, `recorder`,
 `frequency_manager`, `scanner`, `meteor_demodulator`, `atv_decoder`, `network_sink`, audio sinks,
-**`rigctl_server`**, **`rigctl_client`**, `discord_integration`. **No USRP/UHD source on macOS**. Use GNU
-Radio or SDRangel for the B210 there.
+**`rigctl_server`**, **`rigctl_client`**, `discord_integration`. **No USRP/UHD source on macOS**. Use
+[SDRangel](../sdrangel/README.md) (verified with the B210) or GNU Radio there.
 
 ---
 
