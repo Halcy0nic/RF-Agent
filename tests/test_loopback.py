@@ -40,7 +40,7 @@ def test_whitening_and_frame():
 def test_iq_formats_roundtrip():
     x = mod.tone(50e3, 0.01, FS) * 0.7
     with tempfile.TemporaryDirectory() as d:
-        for ext, tol in ((".cs8", 1 / 64), (".cu8", 1 / 64), (".cs16", 1e-3), (".cf32", 1e-6), (".wav", 1e-3),
+        for ext, tol in ((".cs8", 1 / 64), (".cu8", 1 / 64), (".cs16", 1e-3), (".cs32", 1e-6), (".cf32", 1e-6), (".wav", 1e-3),
                          (".sigmf-data", 1e-6)):
             p = iq.save(Path(d) / f"t{ext}", x, fs=FS, peak=None)
             y, fs = iq.load(p, fs=FS)
@@ -191,6 +191,19 @@ def test_image_and_ofdm():
     assert abs(f[np.argmax(p)] - expect) < 1e3
     o = mod.ofdm(RNG.integers(0, 2, 960).astype(np.uint8))
     assert dsp.papr_db(o) > 6        # OFDM is peaky: needs back-off before the DAC
+
+
+def test_sigmf_sidecar_for_raw_file():
+    """b210_rx.py-style output: raw .cf32 + <name>.sigmf-meta -> iq.load finds fs and centre itself."""
+    import json
+    x = mod.tone(10e3, 0.01, FS)
+    with tempfile.TemporaryDirectory() as d:
+        p = iq.save(Path(d) / "cap.cf32", x, peak=None)
+        Path(d, "cap.sigmf-meta").write_text(json.dumps({"global": {"core:datatype": "cf32_le",
+            "core:sample_rate": FS}, "captures": [{"core:sample_start": 0, "core:frequency": 433.92e6}]}))
+        y, fs = iq.load(p)
+        assert fs == FS and len(y) == len(x)
+        assert iq.info_from_name(p)["center_hz"] == 433.92e6
 
 
 if __name__ == "__main__":

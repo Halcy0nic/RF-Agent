@@ -8,6 +8,7 @@ representation: a 1-D ``numpy.complex64`` array scaled to roughly [-1, 1].
 | CS8     | .cs8 .s8              | int8  I,Q interleaved                     | hackrf_transfer -r / -t              |
 | CU8     | .cu8 .u8              | uint8 I,Q interleaved, 127.5 = zero       | rtl_sdr                              |
 | CS16    | .cs16 .s16            | int16 I,Q interleaved                     | rtl_fm -M raw, uhd_rx_cfile -t short |
+| CS32    | .cs32 .s32            | int32 I,Q interleaved                     | SDRangel SigMF sink (32-bit, ci32_le)|
 | CF32    | .cf32 .cfile .fc32    | float32 I,Q interleaved (= complex64)     | GNU Radio file sink, uhd_rx_cfile    |
 | WAV     | .wav                  | 2-channel RIFF, ch0 = I, ch1 = Q          | SDR++ / SDR# baseband recorder       |
 | SigMF   | .sigmf-data + -meta   | any of the above, described by JSON       | SigMF-aware tools                    |
@@ -32,10 +33,11 @@ RAW_FORMATS = {
     ".cs8": "cs8", ".s8": "cs8",
     ".cu8": "cu8", ".u8": "cu8",
     ".cs16": "cs16", ".s16": "cs16",
+    ".cs32": "cs32", ".s32": "cs32",
     ".cf32": "cf32", ".cfile": "cf32", ".fc32": "cf32",
 }
 
-SIGMF_DATATYPE = {"cs8": "ci8", "cu8": "cu8", "cs16": "ci16_le", "cf32": "cf32_le"}
+SIGMF_DATATYPE = {"cs8": "ci8", "cu8": "cu8", "cs16": "ci16_le", "cs32": "ci32_le", "cf32": "cf32_le"}
 
 
 def fmt_of(path) -> str:
@@ -61,6 +63,8 @@ def from_bytes(buf: bytes | np.ndarray, fmt: str) -> np.ndarray:
         a = (np.frombuffer(buf, dtype=np.uint8).astype(np.float32) - 127.5) / 127.5
     elif fmt == "cs16":
         a = np.frombuffer(buf, dtype="<i2").astype(np.float32) / 32768.0
+    elif fmt == "cs32":
+        a = (np.frombuffer(buf, dtype="<i4").astype(np.float64) / 2147483648.0).astype(np.float32)
     elif fmt == "cf32":
         a = np.frombuffer(buf, dtype="<f4")
     else:
@@ -87,6 +91,8 @@ def to_bytes(x: np.ndarray, fmt: str, peak: float | None = None) -> bytes:
         return np.clip(np.round(inter * 127.5 + 127.5), 0, 255).astype(np.uint8).tobytes()
     if fmt == "cs16":
         return np.clip(np.round(inter * 32767), -32767, 32767).astype("<i2").tobytes()
+    if fmt == "cs32":
+        return np.clip(np.round(inter.astype(np.float64) * 2147483647), -2147483647, 2147483647).astype("<i4").tobytes()
     if fmt == "cf32":
         return inter.astype("<f4").tobytes()
     raise ValueError(fmt)
@@ -115,7 +121,11 @@ def load(path, fs: float | None = None, fmt: str | None = None, offset_s: float 
         if dt not in inv:
             raise ValueError(f"unsupported SigMF datatype {dt}")
         return load(data_p, fs=g.get("core:sample_rate"), fmt=inv[dt], offset_s=offset_s, seconds=seconds)
-    bps = {"cs8": 2, "cu8": 2, "cs16": 4, "cf32": 8}[fmt]  # bytes per complex sample
+    if fs is None:                       # a SigMF sidecar next to a raw file (e.g. b210_rx.py output) gives fs
+        side = sidecar_meta(path)
+        if side:
+            fs = side["global"].get("core:sample_rate")
+    bps = {"cs8": 2, "cu8": 2, "cs16": 4, "cs32": 8, "cf32": 8}[fmt]  # bytes per complex sample
     start = int(offset_s * fs) if (offset_s and fs) else 0
     count = int(seconds * fs) if (seconds and fs) else -1
     with open(path, "rb") as f:
@@ -195,13 +205,27 @@ def save(path, x: np.ndarray, fs: float | None = None, fmt: str | None = None, p
     return path
 
 
+def sidecar_meta(path) -> dict | None:
+    """SigMF metadata stored next to a raw file as <name>.sigmf-meta (b210_rx.py writes these)."""
+    p = Path(path).with_suffix(".sigmf-meta")
+    if p.exists():
+        try:
+            return json.loads(p.read_text())
+        except (OSError, ValueError):
+            return None
+    return None
+
+
 def info_from_name(path) -> dict:
-    """Pull centre frequency / time hints out of common recorder file names.
+    """Centre frequency from a SigMF sidecar, else from common recorder file names.
 
     SDR++:   baseband_433920000Hz_12-34-56_14-10-2026.wav
     SDR#:    SDRSharp_20261014_123456Z_433920000Hz_IQ.wav
     HackRF -w: HackRF_20261014_123456Z_433920kHz_IQ.wav
     """
+    side = sidecar_meta(path)
+    if side and side.get("captures") and "core:frequency" in side["captures"][0]:
+        return {"center_hz": float(side["captures"][0]["core:frequency"])}
     name = Path(path).name
     out = {}
     m = re.search(r"(\d+(?:\.\d+)?)(Hz|kHz|MHz)", name)
