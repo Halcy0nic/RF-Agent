@@ -118,6 +118,7 @@ def main():
     ap.add_argument("--min-burst", type=float, default=5e-4)
     ap.add_argument("--merge-gap", type=float, help="join bursts separated by less than this (s)")
     ap.add_argument("--skip", type=float, default=0.05, help="seconds to drop at the start (RX settling)")
+    ap.add_argument("--keep-dc", action="store_true", help="don't subtract the mean (DC offset) before decoding")
     ap.add_argument("--out", help="fm: output audio WAV")
     ap.add_argument("--nfm", action="store_true", help="fm: narrow FM (5 kHz deviation, no de-emphasis)")
     ap.add_argument("--plot", help="write diagnostic PNGs with this path prefix")
@@ -127,6 +128,8 @@ def main():
     if fs is None:
         raise SystemExit("raw file: pass --fs")
     x = x[int(a.skip * fs):]
+    if not a.keep_dc:
+        x = dsp.dc_block(x)      # a receiver's DC offset can rival a weak signal (HackRF RX) and bias FM/FSK
     off = locate(x, fs, a, a.kind)
     rep = {"file": a.file, "fs": fs, "offset_hz": round(off, 1)}
 
