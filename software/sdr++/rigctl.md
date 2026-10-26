@@ -76,8 +76,9 @@ rig("f")                  # '433920000'
 rig("\\recorder_start")   # 'RPRT 0'   (note the escaped backslash in Python)
 ```
 
-Hamlib's own client should work through its network backend (model 2). Not tested here because Hamlib
-isn't installed: `rigctl -m 2 -r localhost:4532 F 433920000`.
+Hamlib's own client works through its network backend (model 2): `rigctl -m 2 -r localhost:4532 F 433920000`
+(verified on Ubuntu 26.04 with Hamlib 4.6.5: `F`, `f`, `M FM 12500`, `m`). Quirk: SDR++ closes the socket on `q`
+without replying, so one-shot `rigctl` prints its answer and then hangs on exit. Wrap it: `timeout 5 rigctl ...`.
 
 ---
 
@@ -191,7 +192,13 @@ tools/winlist "SDR++"                            # -> "<windowID> <x> <y> <w> <h
 screencapture -x -o -l <windowID> shot.png       # -x no sound, -o no shadow
 ```
 
-Requirements and tips:
+**Linux:** GNOME/Wayland blocks window grabs, so `sdrpp.py` runs SDR++ on a private virtual display (Xvfb
+`:99`, X11 forced) and captures it with `xdotool` + ImageMagick `import`. Install once:
+`sudo apt install xvfb xdotool imagemagick`. The window is not shown on your desktop. Set `SDRPP_HEADLESS=0`
+to use your real desktop (screenshots then won't work under Wayland). Verified on Ubuntu 26.04 with
+`tests/ota_test.py` (HackRF → RTL-SDR, 5/5 pass, screenshots show the packets).
+
+Requirements and tips (macOS):
 
 - **Screen Recording permission** for the app running the script (Terminal, iTerm, Claude, VS Code):
   System Settings → Privacy & Security → Screen & System Audio Recording. Without it the capture is blank

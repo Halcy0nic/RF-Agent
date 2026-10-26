@@ -1,6 +1,6 @@
 """Drive SDR++ without the mouse: config edits, the rigctl server, the baseband recorder and window screenshots.
 
-macOS-first (paths, `open -a`, `screencapture`). On Linux set SDRPP_CONFIG_DIR and replace launch()/grab().
+Works on macOS (`open -a`, `screencapture`) and Linux (direct launch, SIGTERM quit, GNOME/X11 screenshots).
 
 Isolated mode (default): SDR++ is launched with its `-r <root>` flag pointing at a private config directory
 (tmp/sdrpp/root, seeded once from your normal config), so the normal SDR++ config is left as it was. Set SDRPP_ISOLATED=0 to drive the normal config instead (then use
@@ -39,10 +39,13 @@ import os
 import shutil
 import socket
 import subprocess
+import sys
 import time
 from pathlib import Path
 
-USER_CFG_DIR = Path.home() / "Library/Application Support/sdrpp"      # SDR++'s normal config (macOS)
+MAC = sys.platform == "darwin"
+USER_CFG_DIR = (Path.home() / "Library/Application Support/sdrpp" if MAC       # SDR++'s normal config
+                else Path.home() / ".config/sdrpp")
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[2]
 OUT = Path(os.environ.get("SDRPP_OUT", REPO / "tmp" / "sdrpp"))
@@ -53,6 +56,7 @@ REC_DIR = OUT / "rec"
 BACKUP_DIR = OUT / "config_backup"
 WINLIST_SRC = REPO / "tools" / "winlist.swift"      # shared with software/sdrangel/tools
 WINLIST = REPO / "tools" / "winlist"
+XDISPLAY = os.environ.get("SDRPP_XDISPLAY", ":99")
 APP = "SDR++"
 PROC = "sdrpp"
 RIGCTL = ("localhost", int(os.environ.get("SDRPP_RIGCTL_PORT", 4532)))
@@ -99,7 +103,7 @@ def restore_config(src: Path = BACKUP_DIR, relaunch: bool = False) -> None:
     for p in files:
         shutil.copy2(p, USER_CFG_DIR / p.name)
     if relaunch:
-        subprocess.run(["open", "-a", APP])
+        subprocess.run(["open", "-a", APP] if MAC else [PROC])
 
 
 def read_config(name: str = "config.json") -> dict:
@@ -125,7 +129,10 @@ def quit_app(timeout: float = 15) -> None:
     """Graceful quit (SDR++ saves its config), then SIGTERM if it hangs."""
     if not running():
         return
-    subprocess.run(["osascript", "-e", f'quit app "{APP}"'], capture_output=True)
+    if MAC:
+        subprocess.run(["osascript", "-e", f'quit app "{APP}"'], capture_output=True)
+    else:
+        subprocess.run(["pkill", "-INT", "-x", PROC])
     t0 = time.time()
     while running() and time.time() - t0 < timeout:
         time.sleep(0.3)
@@ -134,13 +141,32 @@ def quit_app(timeout: float = 15) -> None:
         time.sleep(2)
 
 
+def _linux_env() -> dict:
+    """Linux: run SDR++ on a private virtual X display (Xvfb) so screenshots work under Wayland/GNOME, which
+    blocks window grabs. Needs: sudo apt install xvfb xdotool imagemagick. SDRPP_HEADLESS=0 uses your desktop
+    (then grab() cannot work under Wayland)."""
+    env = dict(os.environ)
+    if os.environ.get("SDRPP_HEADLESS", "1") == "0":
+        return env
+    if subprocess.run(["pgrep", "-f", f"Xvfb {XDISPLAY}"], capture_output=True).returncode != 0:
+        subprocess.Popen(["Xvfb", XDISPLAY, "-screen", "0", "1600x900x24"], stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+        time.sleep(1.5)
+    env.pop("WAYLAND_DISPLAY", None)
+    env.update(DISPLAY=XDISPLAY, XDG_SESSION_TYPE="x11", LIBGL_ALWAYS_SOFTWARE="1")
+    return env
+
+
 def launch(timeout: float = 60) -> None:
     """Open SDR++ (with -r <root> in isolated mode) and wait until the rigctl server accepts connections.
     `open -a ... --args` only passes arguments to a fresh launch, so SDR++ must not already be running."""
-    if CFG_DIR != USER_CFG_DIR:
-        subprocess.run(["open", "-a", APP, "--args", "-r", str(CFG_DIR)])
+    args = ["-r", str(CFG_DIR)] if CFG_DIR != USER_CFG_DIR else []
+    if MAC:
+        subprocess.run(["open", "-a", APP, *(["--args", *args] if args else [])])
     else:
-        subprocess.run(["open", "-a", APP])
+        OUT.mkdir(parents=True, exist_ok=True)
+        log = open(OUT / "sdrpp.log", "ab")
+        subprocess.Popen([PROC, *args], stdout=log, stderr=log, start_new_session=True, env=_linux_env())
     t0 = time.time()
     while time.time() - t0 < timeout:
         try:
@@ -359,6 +385,16 @@ def grab(path, retries: int = 3) -> Path:
     If the display is asleep, screencapture fails; we nudge it awake with `caffeinate -u` and retry."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    if not MAC:
+        env = _linux_env()
+        for _ in range(retries):
+            ids = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", "SDR\\+\\+"], env=env,
+                                 capture_output=True, text=True).stdout.split()
+            if ids:
+                subprocess.run(["import", "-window", ids[-1], str(path)], env=env, check=True)
+                return path
+            time.sleep(1)
+        raise RuntimeError("SDR++ window not found on the Xvfb display (sudo apt install xvfb xdotool imagemagick)")
     last = None
     for _ in range(retries):
         try:
