@@ -53,6 +53,12 @@ def uhd_example(name: str) -> str:
     sys.exit(f"UHD example '{name}' not found (install UHD: brew install uhd / apt install uhd-host)")
 
 
+def wire_flag(example: str, env: dict) -> str:
+    """UHD 4.10 calls the over-the-wire option --otw, UHD 4.9 (Ubuntu apt) calls it --wirefmt."""
+    h = subprocess.run([example, "--help"], env=env, capture_output=True, text=True)
+    return "--wirefmt" if "--wirefmt" in (h.stdout + h.stderr) else "--otw"
+
+
 def uhd_env() -> dict:
     env = dict(os.environ)
     if "UHD_IMAGES_DIR" not in env and DEFAULT_IMAGES.exists():
@@ -96,12 +102,14 @@ def main():
     chans = a.channels or a.channel
     nsamps = int(round(a.seconds * a.rate))
     cmd = [uhd_example("rx_samples_to_file"), "--args", a.args, "--freq", str(a.freq), "--rate", str(a.rate),
-           "--gain", str(a.gain), "--ant", a.ant, "--channels", chans, "--type", fmt, "--nsamps", str(nsamps),
-           "--file", str(out)]
+           "--gain", str(a.gain), "--ant", a.ant, "--channels", chans, "--type", fmt]
+    # one UHD stream command holds at most 2^28 samples (26 s at 10 MS/s): use --duration beyond that
+    cmd += ["--duration", str(a.seconds)] if nsamps >= 2**28 else ["--nsamps", str(nsamps)]
+    cmd += ["--file", str(out)]
     if a.bw:
         cmd += ["--bw", str(a.bw)]
     if a.otw:
-        cmd += ["--otw", a.otw]
+        cmd += [wire_flag(cmd[0], uhd_env()), a.otw]
     if a.ref:
         cmd += ["--ref", a.ref]
     if a.extra:

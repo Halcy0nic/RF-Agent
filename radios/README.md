@@ -6,7 +6,7 @@ Usage documentation for each SDR on the bench, plus the concepts that apply to a
 |---|---|---|---|
 | HackRF One | [hackrf/](hackrf/README.md) | Transmitter (replays generated IQ), wideband RX, fast sweeper | Attached, verified 2026-10-14 |
 | RTL-SDR Blog V4 | [rtl-sdr/](rtl-sdr/README.md) | Receiver for verification, SDR++ source, `rtl_433`/`rtl_power` | Attached, verified 2026-10-14 |
-| USRP B210 (OpenSourceSDRLab Artix-7) | [usrp-b210/](usrp-b210/README.md) | Full-duplex 2×2 MIMO TX/RX, SDRangel source | Attached, verified 2026-10-17 (RX, TX, duplex, Python, SDRangel) |
+| USRP B210 (OpenSourceSDRLab Artix-7) | [usrp-b210/](usrp-b210/README.md) | Full-duplex 2×2 MIMO TX/RX, SDRangel source | Attached, verified 2026-10-17 on macOS (RX, TX, duplex, Python, SDRangel); RX verified 2026-10-26 on Ubuntu with UHD 4.9 (10 MS/s, decoded OOK/FSK signals) |
 
 ## Side-by-side
 

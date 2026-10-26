@@ -27,9 +27,21 @@ Other software worth knowing (not installed or documented here yet): **GQRX** (s
 (ADS-B), **SatDump** (weather satellites), **Gpredict** (satellite tracking, drives SDR++ via rigctl
 `AOS`/`LOS`).
 
+## Linux host (Ubuntu, checked 2026-10-26)
+
+| Tool | Version | Note |
+|---|---|---|
+| UHD (apt) | 4.9.0.1 | `python3-uhd` installed. Examples in `/usr/libexec/uhd/examples`. 4.9 uses `--wirefmt` where 4.10 uses `--otw` ([../radios/usrp-b210](../radios/usrp-b210/README.md#11-linux-host-notes-ubuntu)) |
+| GNU Radio (apt) | 3.10.12 | `gr-uhd`, `uhd_fft` |
+| SDR++ (deb nightly) | 1.2.1-1517 | **No USRP source**; Airspy/HackRF/RTL-SDR etc. only ([sdr++](sdr++/README.md#11-linux-host-notes-ubuntu)) |
+| SDRangel | not installed | |
+| Hamlib `rigctl` | 4.6.5 | |
+
 ## Python environment for this repo
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # numpy, scipy, matplotlib, pillow
+python3 -m venv --system-site-packages .venv && .venv/bin/pip install -r requirements.txt   # numpy, scipy, matplotlib, pillow
 .venv/bin/python tests/test_loopback.py                               # 15 software tests, no hardware
 ```
+
+`--system-site-packages` lets the venv import the distribution's `uhd` module (Linux `python3-uhd`). Without it, `import uhd` fails inside the venv.

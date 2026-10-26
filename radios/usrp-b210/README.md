@@ -10,6 +10,10 @@ reference that swaps the Spartan-6 FPGA for a **Xilinx Artix-7 XC7A75T** (a XC7A
 exists). It runs with stock UHD **but needs the vendor's FPGA image**. Everything else (FX3 USB firmware,
 UHD tools, GNU Radio, SDRangel) is the same as for an Ettus B210.
 
+> Verified on a second host (2026-10-26): Ubuntu Linux x86-64, UHD 4.9.0.1 (apt), same board (`Custom_SDR_B210`),
+> USB 3. RX at 10 MS/s with no drops and over-the-air decoding of three CTF signals (OOK Morse, OOK and 2-FSK
+> UART text). See [section 11](#11-linux-host-notes-ubuntu).
+>
 > Verified on this bench (2026-10-17): OpenSourceSDRLab B210, XC7A75T, name
 > `Custom_SDR_B210`. UHD 4.10.0.0 (Homebrew) and UHD 4.9 (bundled in SDRangel 7.27.2), macOS on Apple
 > Silicon, USB 3 through a USB-C hub. FW 8.0, FPGA 16.0. RX, TX, full duplex, GNU Radio Python and SDRangel
@@ -72,8 +76,8 @@ reference locked), TRX1/TRX2 (red = TX, blue = RX), RX1/RX2 (blue = RX). MX1.25 
 # macOS
 brew install uhd gnuradio              # gnuradio is optional (uhd_fft, uhd_siggen, Python gr-uhd)
 # Debian / Ubuntu
-sudo apt install uhd-host libuhd-dev python3-uhd gnuradio
-sudo cp /usr/lib/uhd/utils/uhd-usrp.rules /etc/udev/rules.d/ && sudo udevadm control --reload && sudo udevadm trigger
+sudo apt install uhd-host libuhd-dev python3-uhd gnuradio       # the apt package installs its own udev rules
+# source builds only: sudo cp <prefix>/lib/uhd/utils/uhd-usrp.rules /etc/udev/rules.d/ && sudo udevadm control --reload && sudo udevadm trigger
 ```
 
 UHD loads the FX3 USB firmware and the FPGA image from disk **every time it opens the device**. One command
@@ -161,7 +165,7 @@ Anything transmitted before then is missed. `tests/ota_b210.py` waits for the fi
 ### UHD example directly
 
 ```bash
-EX=$(brew --prefix uhd)/lib/uhd/examples        # Linux: /usr/lib/uhd/examples
+EX=$(brew --prefix uhd)/lib/uhd/examples        # Ubuntu apt: /usr/libexec/uhd/examples
 $EX/rx_samples_to_file --args type=b200 --freq 433.92e6 --rate 2e6 --gain 40 --ant RX2 \
     --type float --nsamps 4000000 --file cap.cf32
 ```
@@ -375,3 +379,39 @@ conda-forge `uhd`, or use the GNU Radio route above.
 - **Wide, drop-free bandwidth**: 30 MHz (one channel, sc16) to 56 MHz (sc8) over USB 3.
 - The HackRF still covers 1–70 MHz and sweeps fast (`hackrf_sweep`). The RTL-SDR is the cheap always-on
   receiver.
+
+---
+
+## 11. Linux host notes (Ubuntu)
+
+The sections above were written on macOS. Verified on Ubuntu (x86-64, 2026-10-26) with the same board:
+
+| Item | State |
+|---|---|
+| UHD | apt `uhd-host`, `libuhd4.9.0` **4.9.0.1**, `python3-uhd`. The repo `.venv` is created with `--system-site-packages`, so `import uhd` works in it. A plain venv (for example another project's) does not see it |
+| UHD examples | Not on `PATH`; in `/usr/libexec/uhd/examples/`. `b210_rx.py` searches that path |
+| udev | The apt package installs `/usr/lib/udev/rules.d/60-uhd-host.rules`; the user needs to be in `plugdev` |
+| UHD images | **Per host.** UHD loads the FX3 firmware and the FPGA image from the host's disk every time it opens the board, nothing is flashed, so the images installed on another machine do not help. Run `tools/setup_images.sh --variant 75T` once per host. It writes `~/.local/share/uhd/images` and adds `UHD_IMAGES_DIR` to `~/.zshrc` (open a new shell afterwards) |
+| Device | Before UHD opens it, `lsusb` shows `2500:0020` (FX3 bootloader, normal). `uhd_find_devices` then finds `Custom_SDR_B210`. `uhd_usrp_probe --args type=b200`: B210, FW 8.0, USB 3, register loopback passed, RX 50–6000 MHz, RX gain 0–76 dB |
+| SDR++ / SDRangel | The Ubuntu SDR++ package has no USRP source and SDRangel is not installed. Use UHD (`b210_rx.py`, `uhd_fft`) or GNU Radio. See [../../software/sdr++/README.md](../../software/sdr++/README.md) section 11 |
+
+### UHD 4.9 versus 4.10 differences
+
+| Symptom | Cause / fix |
+|---|---|
+| `rx_samples_to_file`: `unrecognised option '--otw'` | UHD 4.9 names it `--wirefmt`; 4.10 renamed it `--otw`. `b210_rx.py --otw` now picks the right flag |
+| `AssertionError: Invalid stream command: num_samps exceeds maximum value` | One stream command holds at most 2^28 samples (26 s at 10 MS/s). Use `--duration` (`b210_rx.py` switches to it automatically above that) |
+
+### Capturing long and wide (measured 2026-10-26, 10 MS/s sc16 = 40 MB/s)
+
+- 10 MS/s over USB 3 was clean for 5 minutes (12 GB, no overflow). The first runs that wrote **straight to disk
+  overflowed intermittently** ("O", dropped samples, then `Timeout while streaming` and a truncated file even though the
+  exit code was 0). Recording to RAM (`-o /dev/shm/cap.cs16`, 30 GB tmpfs) never dropped; copy the file to disk afterwards
+  and check `overflow_reported` in the JSON. Re-check the sample count against rate x seconds.
+- A single 10 MS/s capture centred between two targets covers both: 436.5 MHz sees 431.5–441.5 MHz, enough for signals
+  at 433 and 440 MHz at the same time. Use `iq_inspect.py` for a first look, then extract narrow channels (mix, low-pass,
+  decimate) with SciPy.
+- **Constant spur lines at exact multiples of 8 MHz** (432.000 and 440.000 MHz here) are B210 clock/LO artefacts at
+  gain 40. They never carry modulation and are not signals. Judge by whether the line appears and disappears with
+  other activity, or sits at an integer multiple of the 16 MHz master clock.
+- Over the air at ~1 m (gain 40, RX2): a 433.05 MHz OOK signal was 44 dB over the noise floor in a 2.4 kHz bin.

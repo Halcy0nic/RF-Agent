@@ -286,3 +286,15 @@ Details, protocol and gotchas: [rigctl.md](rigctl.md).
 | Crashes when changing decimation | Disable the Radio VFO, or reduce its bandwidth below the decimated span |
 | Settings revert | You edited JSON while SDR++ was running. Quit first |
 | Screenshot fails | Grant **Screen Recording** permission to the terminal/app running the script. Keep the display awake (`caffeinate -dims`) |
+
+---
+
+## 11. Linux host notes (Ubuntu)
+
+| Item | State |
+|---|---|
+| Package | `sdrpp 1.2.1-1517` (nightly deb), `/usr/bin/sdrpp`, plugins in `/usr/lib/sdrpp/plugins` |
+| **USRP / B210** | **No `usrp_source.so` plugin in this build.** SDR++ cannot use the B210 here. Sources present: Airspy, AirspyHF, BladeRF, HackRF, Hermes, HydraSDR, LimeSDR, PlutoSDR, RFNM, RFspace, RTL-SDR, RTL-TCP, SDR++ Server, SpyServer, SDRplay, Network, Audio, File, plus the `iq_exporter` module. Options for the B210: build SDR++ from source with `-DOPT_BUILD_USRP_SOURCE=ON`; capture with UHD (`rx_samples_to_file`, [B210 README](../../radios/usrp-b210/README.md)) and play the file back through the **File** source; or use GNU Radio / `uhd_fft` |
+| Config dir | `~/.config/sdrpp/` (existing; source currently `HackRF`, centre 100 MHz) |
+| Rigctl server | Module present but `autoStart: false`, `recording: false`, `recorder: ""`, `vfo: ""`. `sdrpp.py` rewrites these in its isolated root |
+| Tools | `rigctl` (Hamlib 4.6.5), `xvfb-run`, `Xvfb`, `xdotool`, ImageMagick `import` all installed, so the headless Xvfb capture path in [rigctl.md](rigctl.md) §5 should work. Not exercised yet on this install |
