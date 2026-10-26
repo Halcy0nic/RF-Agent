@@ -1,6 +1,6 @@
 """Drive SDR++ without the mouse: config edits, the rigctl server, the baseband recorder and window screenshots.
 
-Works on macOS (`open -a`, `screencapture`) and Linux (direct launch, SIGTERM quit, GNOME/X11 screenshots).
+Works on macOS (`open -a`, `screencapture`) and Linux (direct launch, SIGINT quit, GNOME/X11 screenshots).
 
 Isolated mode (default): SDR++ is launched with its `-r <root>` flag pointing at a private config directory
 (tmp/sdrpp/root, seeded once from your normal config), so the normal SDR++ config is left as it was. Set SDRPP_ISOLATED=0 to drive the normal config instead (then use
