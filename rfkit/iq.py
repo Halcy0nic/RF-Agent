@@ -239,5 +239,5 @@ def samples_for(seconds: float, fs: float) -> int:
 
 
 def file_bytes(seconds: float, fs: float, fmt: str = "cs8") -> int:
-    """How big will a recording be? (CS8 at 8 MS/s = 16 MB/s.)"""
-    return int(seconds * fs) * {"cs8": 2, "cu8": 2, "cs16": 4, "cf32": 8}[fmt]
+    """How big will a recording be? (CS8 at 8 MS/s = 16 MB/s.) fmt: cs8, cu8, cs16, cs32 or cf32."""
+    return int(seconds * fs) * {"cs8": 2, "cu8": 2, "cs16": 4, "cs32": 8, "cf32": 8}[fmt]

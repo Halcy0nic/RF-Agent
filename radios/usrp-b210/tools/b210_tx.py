@@ -35,7 +35,8 @@ def main():
     ap.add_argument("--rate", type=f_num, required=True, help="sample rate the file was generated at")
     ap.add_argument("--gain", type=float, default=60, help="TX gain dB (0-89.75)")
     ap.add_argument("--channel", default="0")
-    ap.add_argument("--peak", type=float, default=0.7, help="rescale so the peak is this fraction of full scale")
+    ap.add_argument("--peak", type=float, default=0.7,
+                    help="rescale so the peak is this fraction of full scale; 0 = no rescaling (a .cf32 file then plays unchanged)")
     ap.add_argument("--repeat", type=int, default=1, help="play the file this many times")
     ap.add_argument("--gap", type=float, default=0.5, help="seconds between plays")
     ap.add_argument("--args", default="type=b200")
@@ -47,14 +48,14 @@ def main():
     if not src.exists():
         sys.exit(f"no such file: {src}")
     tmpdir = None
-    if src.suffix in (".cf32", ".fc32", ".cfile") and a.peak is None:
+    if src.suffix in (".cf32", ".fc32", ".cfile") and a.peak == 0:
         play = src
     else:
         from rfkit import iq
         x, _ = iq.load(src, fs=a.rate)
         tmpdir = tempfile.TemporaryDirectory()
         play = Path(tmpdir.name) / "tx.cf32"
-        iq.save(play, x, peak=a.peak)
+        iq.save(play, x, peak=a.peak or None)
     n = play.stat().st_size // 8
     cmd = [uhd_example("tx_samples_from_file"), "--args", a.args, "--file", str(play), "--type", "float",
            "--rate", str(a.rate), "--freq", str(a.freq), "--gain", str(a.gain), "--ant", "TX/RX",

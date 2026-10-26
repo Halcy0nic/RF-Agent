@@ -244,7 +244,7 @@ $P radios/usrp-b210/tools/b210_tx.py sig.cs8 --freq 433.92e6 --rate 2e6 --gain 5
 $P radios/usrp-b210/tools/b210_tx.py --dry-run sig.cs8 --freq 2.44e9 --rate 10e6 --gain 60
 ```
 
-It converts any rfkit-readable file to complex float32 at 70 % of full scale (`--peak`), then runs
+It converts any rfkit-readable file to complex float32 at 70 % of full scale (`--peak`; `--peak 0` skips the rescaling, so a `.cf32` file plays exactly as it is), then runs
 `tx_samples_from_file --type float --ant TX/RX`. Like RX, the first ~3 s after start are device set-up
 before RF comes out.
 

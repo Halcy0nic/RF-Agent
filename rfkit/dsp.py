@@ -249,19 +249,26 @@ def am_demod(x: np.ndarray, fs: float, audio_fs: float = 48_000, audio_bw: float
     return (a / (np.max(np.abs(a)) or 1)).astype(np.float32), fs / dec
 
 
+def one_pole_lowpass(x: np.ndarray, fs: float, tau_s: float) -> np.ndarray:
+    """Causal one-pole low-pass y[n] = y[n-1] + alpha (x[n] - y[n-1]), alpha = 1 - exp(-1 / (fs tau)).
+    This is the FM de-emphasis filter. It is the convolution of x with alpha (1 - alpha)^k, done with an FFT
+    over the kernel's effective length (the tail below 1e-9 is dropped), so it is fast on long recordings."""
+    alpha = 1 - np.exp(-1 / (fs * tau_s))
+    n_k = int(min(len(x), np.ceil(np.log(1e-9) / np.log(1 - alpha)))) if alpha < 1 else 1
+    h = alpha * (1 - alpha) ** np.arange(max(n_k, 1))
+    n = len(x) + len(h) - 1
+    nfft = 1 << int(np.ceil(np.log2(n)))
+    y = np.fft.irfft(np.fft.rfft(x, nfft) * np.fft.rfft(h, nfft), nfft)[: len(x)]
+    return y.astype(np.asarray(x).dtype if np.asarray(x).dtype.kind == "f" else np.float32)
+
+
 def fm_demod(x: np.ndarray, fs: float, deviation_hz: float = 75e3, audio_fs: float = 48_000,
              deemph_us: float | None = 75.0) -> tuple[np.ndarray, float]:
     """Broadcast/NFM audio: discriminator / deviation, de-emphasis (75 us US, 50 us EU, None for NFM data),
     low-pass and decimate to ~audio_fs."""
     a = fm_discriminator(x, fs) / deviation_hz
     if deemph_us:
-        alpha = 1 - np.exp(-1 / (fs * deemph_us * 1e-6))
-        y = np.empty_like(a)
-        acc = 0.0
-        for i, v in enumerate(a):        # one-pole IIR; fine for offline use
-            acc += alpha * (v - acc)
-            y[i] = acc
-        a = y
+        a = one_pole_lowpass(a, fs, deemph_us * 1e-6)
     a = lowpass(a, 15e3, fs)
     dec = max(1, int(fs // audio_fs))
     return a[::dec].astype(np.float32), fs / dec

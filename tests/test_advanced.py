@@ -194,6 +194,24 @@ def test_survey_fast_hopper_and_noise_events():
     assert len(g["hoppers"]) == 1 and len(g["hoppers"][0]["dwells"]) == 10, g["hoppers"]
 
 
+def test_one_pole_lowpass_matches_loop():
+    x = RNG.standard_normal(5000).astype(np.float32)
+    fs, tau = 250e3, 75e-6
+    alpha = 1 - np.exp(-1 / (fs * tau))
+    ref, acc = np.empty_like(x), 0.0
+    for i, v in enumerate(x):
+        acc += alpha * (v - acc)
+        ref[i] = acc
+    assert np.max(np.abs(dsp.one_pole_lowpass(x, fs, tau) - ref)) < 1e-4
+
+
+def test_small_helpers():
+    from rfkit import iq
+    assert iq.file_bytes(1.0, 1e6, "cs32") == 8_000_000
+    a, b = mod.multitone([1e3, 5e3], 0.01, 1e5), mod.multitone([1e3, 5e3], 0.01, 1e5)
+    assert np.array_equal(a, b)
+
+
 def test_import_rfkit_without_scipy():
     import subprocess
     code = ("import sys; sys.modules['scipy'] = None; sys.modules['scipy.ndimage'] = None; "

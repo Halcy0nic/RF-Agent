@@ -24,8 +24,8 @@ from gnuradio import blocks, gr, uhd  # noqa: E402
 
 
 def capture(freq: float, rate: float, gain: float, seconds: float, antenna: str = "RX2", channel: int = 0,
-            args: str = "type=b200") -> np.ndarray:
-    """Return `seconds` of complex64 samples from the B210."""
+            args: str = "type=b200") -> tuple[np.ndarray, float]:
+    """Return (samples, actual_sample_rate): `seconds` of complex64 samples from the B210 and the rate UHD chose."""
     n = int(seconds * rate)
     tb = gr.top_block()
     src = uhd.usrp_source(args, uhd.stream_args(cpu_format="fc32", channels=[channel]))

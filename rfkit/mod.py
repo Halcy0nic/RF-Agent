@@ -131,10 +131,13 @@ def tone(freq_hz: float, seconds: float, fs: float, amplitude: float = 1.0) -> n
     return (amplitude * np.exp(1j * TWO_PI * freq_hz * t_axis(int(seconds * fs), fs))).astype(np.complex64)
 
 
-def multitone(freqs_hz, seconds: float, fs: float) -> np.ndarray:
+def multitone(freqs_hz, seconds: float, fs: float, seed: int | None = 0) -> np.ndarray:
+    """Several carriers at once. Random start phases keep the peak-to-average ratio low; they come from
+    ``seed`` (default 0) so the same call always gives the same signal. seed=None gives fresh phases."""
     n = int(seconds * fs)
     t = t_axis(n, fs)
-    x = sum(np.exp(1j * (TWO_PI * f * t + np.random.uniform(0, TWO_PI))) for f in freqs_hz)
+    rng = np.random.default_rng(seed)
+    x = sum(np.exp(1j * (TWO_PI * f * t + rng.uniform(0, TWO_PI))) for f in freqs_hz)
     return normalize(x)
 
 
