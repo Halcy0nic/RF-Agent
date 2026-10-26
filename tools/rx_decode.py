@@ -4,7 +4,11 @@
     rx_decode.py morse cap.wav
     rx_decode.py ook   cap.wav [--manchester] [--rate 1000]          # rate is estimated if omitted
     rx_decode.py fsk   cap.wav [--rate 5000]
-    rx_decode.py psk   cap.wav --rate 50e3 [--order 4]
+    rx_decode.py psk   cap.wav --rate 50e3 [--order 4] [--search-rate]   # --search-rate: rate is only approximate
+    rx_decode.py uart  cap.wav [--via ook|fsk] [--rate 1000]               # unknown framing: brute-force text search
+    rx_decode.py ofdm  cap.wav [--order 4]                                 # finds FFT size / prefix, blind equalise
+    rx_decode.py chirp cap.wav --bw 125e3 --sf 7                           # LoRa-style chirp symbols
+    rx_decode.py dsss  cap.wav [--chip-rate 12e3 --code-len 127]           # no rate given: lists candidate rates
     rx_decode.py fm    cap.wav --out audio.wav [--nfm]                 # broadcast / NFM audio to a WAV
     rx_decode.py ook   cap.cu8 --fs 1.024e6                            # raw files need --fs
 
@@ -105,7 +109,7 @@ def decode_bursts(y, fs2, a, metric_fn, rate_mult=1, widen=False):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("kind", choices=["morse", "ook", "fsk", "psk", "fm"])
+    ap.add_argument("kind", choices=["morse", "ook", "fsk", "psk", "fm", "uart", "ofdm", "chirp", "dsss"])
     ap.add_argument("file")
     ap.add_argument("--fs", type=f_num, help="sample rate for raw files (.cu8/.cs8/...)")
     ap.add_argument("--offset", type=f_num, help="signal offset from the tuned centre, Hz (default: auto)")
@@ -119,6 +123,11 @@ def main():
     ap.add_argument("--merge-gap", type=float, help="join bursts separated by less than this (s)")
     ap.add_argument("--skip", type=float, default=0.05, help="seconds to drop at the start (RX settling)")
     ap.add_argument("--keep-dc", action="store_true", help="don't subtract the mean (DC offset) before decoding")
+    ap.add_argument("--search-rate", action="store_true", help="psk: refine --rate by searching +/-8 percent")
+    ap.add_argument("--via", choices=["ook", "fsk"], default="ook", help="uart: keying of the serial data")
+    ap.add_argument("--sf", type=int, help="chirp: spreading factor (bits per symbol)")
+    ap.add_argument("--chip-rate", type=f_num, help="dsss: chip rate (default: list candidates and stop)")
+    ap.add_argument("--code-len", type=int, help="dsss: chips per bit")
     ap.add_argument("--out", help="fm: output audio WAV")
     ap.add_argument("--nfm", action="store_true", help="fm: narrow FM (5 kHz deviation, no de-emphasis)")
     ap.add_argument("--plot", help="write diagnostic PNGs with this path prefix")
@@ -131,6 +140,10 @@ def main():
     if not a.keep_dc:
         x = dsp.dc_block(x)      # a receiver's DC offset can rival a weak signal (HackRF RX) and bias FM/FSK
     off = locate(x, fs, a, a.kind)
+    if a.kind in ("ofdm", "chirp", "dsss") and a.offset is None:
+        # wide, flat signals: the strongest bin is just noise ripple; use the centre of the occupied band
+        g = dsp.gate(x, fs, min_len_s=a.min_burst)
+        off = dsp.signal_center(g if len(g) > 8192 else x, fs, above_floor_db=6)
     rep = {"file": a.file, "fs": fs, "offset_hz": round(off, 1)}
 
     if a.kind == "morse":
@@ -175,6 +188,13 @@ def main():
         if not a.rate:
             raise SystemExit("psk: pass --rate (symbol rate)")
         bw = a.bw or 1.5 * a.rate
+        if a.search_rate:
+            seg0 = dsp.channelize(x, fs, off, bw, out_fs=max(4 * a.rate, 8 * bw / 1.5 / 2))
+            g = dsp.gate(seg0[0], seg0[1])
+            best, _, metric = dsp.refine_symbol_rate(g, seg0[1], a.rate, rel_span=0.08, order=a.order)
+            rep["rate_input"], rep["rate_refined"] = a.rate, round(best, 2)
+            rep["rate_metric"] = round(float(metric.max()), 3)
+            a.rate = best
         sps_target = 8
         y, fs2 = dsp.channelize(x, fs, off, bw, out_fs=a.rate * sps_target)
         packets = []
@@ -202,6 +222,89 @@ def main():
         if a.plot and len(syms):
             from rfkit import plot
             plot.constellation(syms, a.plot + "_constellation.png")
+    elif a.kind == "uart":
+        bw = a.bw or (8 * a.rate if a.rate else (20e3 if a.via == "ook" else 80e3))
+        if a.via == "fsk" and a.offset is None:
+            off, spacing = refine_center(x, fs, off, max(4 * bw, 200e3))
+            rep["offset_hz"] = round(off, 1)
+        y, fs2 = dsp.channelize(x, fs, off, bw)
+        if a.via == "ook":
+            def metric(seg, rate):
+                return np.abs(seg)
+        else:
+            def metric(seg, rate):
+                return dsp.lowpass(dsp.fm_discriminator(seg, fs2), 0.75 * rate if rate else 20e3, fs2)
+        segs = dsp.bursts(y, fs2, min_len_s=a.min_burst, merge_gap_s=a.merge_gap or (24 / a.rate if a.rate else 0.03))
+        found, seen = [], set()
+        for s_, e_ in segs:
+            seg = y[s_:e_]
+            try:
+                rate = a.rate or dsp.estimate_symbol_rate(metric(seg, None), fs2)
+            except ValueError:
+                continue
+            stream = dsp.clock_recover_bits(metric(seg, rate), fs2 / rate)
+            for h in bits.bruteforce(stream, top=3):
+                key = (h["mode"], h["text"])
+                if key not in seen:
+                    seen.add(key)
+                    found.append({**h, "rate": round(float(rate), 2), "t_s": round(s_ / fs2, 4),
+                                  "bits": "".join(map(str, stream[:200]))})
+        found.sort(key=lambda h: h["score"] * min(1.0, len(h["text"]) / 16), reverse=True)
+        rep.update(bursts=len(segs), via=a.via, candidates=found[:8])
+    elif a.kind == "ofdm":
+        bw = a.bw or dsp.occupied_bandwidth(dsp.gate(x, fs), fs)[0] * 1.2
+        y, fs2 = dsp.channelize(x, fs, off, bw, out_fs=bw * 1.25)
+        g = dsp.gate(y, fs2)
+        d = dsp.ofdm_detect(g, fs2)
+        if "n_fft" not in d:
+            raise SystemExit("ofdm: no cyclic-prefix structure found (try --bw, or this is not OFDM)")
+        Y = dsp.ofdm_demod(g, d["n_fft"], d["cp"], d["start"])
+        used = dsp.ofdm_occupied(Y)
+        eq = dsp.ofdm_equalize(Y, used, order=a.order if a.order in (2, 4) else 4)
+        order = a.order if a.order in (2, 4) else 4
+        stream = dsp.psk_bits(eq.ravel(), order)
+        rep.update(ofdm=d, symbols=len(Y), used_subcarriers=len(used),
+                   note="blind equalisation: each subcarrier has a %d-fold phase ambiguity; use a known training "
+                        "symbol (dsp.ofdm_equalize training=...) to resolve it" % order,
+                   candidates=bits.bruteforce(stream, top=5))
+        if a.plot:
+            from rfkit import plot
+            plot.constellation(eq[1:].ravel(), a.plot + "_constellation.png")
+    elif a.kind == "chirp":
+        if not (a.bw and a.sf):
+            raise SystemExit("chirp: pass --bw (chirp bandwidth) and --sf (spreading factor)")
+        from fractions import Fraction
+        from scipy.signal import resample_poly
+        y, fs2 = dsp.channelize(x, fs, off, a.bw * 1.1, out_fs=a.bw * 2)
+        g = dsp.gate(y, fs2)
+        fr = Fraction(2 * a.bw / fs2).limit_denominator(1000)
+        g = resample_poly(g, fr.numerator, fr.denominator).astype(np.complex64)
+        r = dsp.css_demod(g, 2 * a.bw, a.bw, a.sf)
+        stream = np.unpackbits(r["values"].astype(">u2").view(np.uint8).reshape(-1, 2), axis=1)[:, -a.sf:].ravel()
+        rep.update(symbols=int(len(r["values"])), start=r["start"], reference_bin=r["reference_bin"],
+                   values=[int(v) for v in r["values"][:64]], candidates=bits.bruteforce(stream, top=5))
+    elif a.kind == "dsss":
+        bw = a.bw or 0
+        if not a.chip_rate:
+            occ = dsp.occupied_bandwidth(x, fs)[0]
+            y, fs2 = dsp.channelize(x, fs, off, a.bw or occ * 1.2)
+            rep.update(note="pass --chip-rate (and --code-len); candidates from cyclostationary lines",
+                       abs2_lines=dsp.cyclic_lines(y, fs2, "abs2"), square_lines=dsp.cyclic_lines(y, fs2, "sq"))
+        else:
+            y, fs2 = dsp.channelize(x, fs, off, bw or 1.6 * a.chip_rate, out_fs=a.chip_rate * 4)
+            soft = dsp.bpsk_soft_chips(y, fs2, a.chip_rate)
+            if not a.code_len:
+                rep.update(chips=len(soft), note="pass --code-len (chips per bit); try periods near the "
+                           "autocorrelation peaks of the soft chips")
+                ac = np.abs(np.fft.ifft(np.abs(np.fft.fft(soft - soft.mean())) ** 2))[: 4096]
+                rep["autocorr_peaks_chips"] = [int(i) for i in np.argsort(ac[8:])[::-1][:8] + 8]
+            else:
+                off_c = dsp.dsss_find_alignment(soft, a.code_len)
+                code = dsp.dsss_recover_code(soft, a.code_len, off_c)
+                corr = dsp.dsss_despread(soft, code, off_c)
+                stream = (corr > 0).astype(np.uint8)
+                rep.update(chip_offset=off_c, bits=len(stream), code="".join("1" if c > 0 else "0" for c in code),
+                           candidates=bits.bruteforce(stream, top=5))
     elif a.kind == "fm":
         dev = 5e3 if a.nfm else 75e3
         bw = a.bw or (2 * (dev + 5e3) if a.nfm else 200e3)

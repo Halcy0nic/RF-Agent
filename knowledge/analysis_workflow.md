@@ -25,6 +25,13 @@ rtl_power -f 430M:440M:10k -g 37 -i 5 -e 2m tmp/power.csv        # 2 minutes of 
 Look for peaks over the floor and their **duty** (fraction of sweeps active). Bursty signals need several
 sweeps or a long `rtl_power` run to be caught.
 
+With a wideband SDR (B210, HackRF) record 10-30 MS/s for a minute and let `tools/survey.py` build the
+time-frequency event table. It separates carriers, steady beacons, hoppers (same burst, moving frequency) and
+one-offs by behaviour, which is how you tell the signal that matters from the chatter around it.
+
+**Before any manual decoding of a 433/868/915 MHz capture, run `rtl_433 -r file.cu8`** (add `-A` for the pulse
+analyser). Consumer sensors, remotes and switches decode in one command and the output names the model and ID.
+
 ### 2 · Capture
 
 - Centre 50–200 kHz away from the target (DC spike). Choose the smallest sample rate that covers it.

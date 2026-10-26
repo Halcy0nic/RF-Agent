@@ -19,10 +19,14 @@ UHD tools, GNU Radio, SDRangel) is the same as for an Ettus B210.
 > Silicon, USB 3 through a USB-C hub. FW 8.0, FPGA 16.0. RX, TX, full duplex, GNU Radio Python and SDRangel
 > all tested against a HackRF One at 433.92 MHz.
 
+> **One program owns the board.** UHD tools, GNU Radio and SDRangel cannot use the B210 at the same time. If
+> `uhd_find_devices` says "No UHD Devices Found" while `lsusb` still lists `2500:0020`, another program (often a
+> forgotten SDRangel) is holding it: close it (`pkill -x sdrangel`) and retry.
+
 | Tool in this folder | What |
 |---|---|
 | [`tools/setup_images.sh`](tools/setup_images.sh) | Download UHD images, install the Artix-7 FPGA image (`--variant 75T\|200T`), set `UHD_IMAGES_DIR` (shell + macOS LaunchAgent) |
-| [`tools/b210_rx.py`](tools/b210_rx.py) | Record IQ (`.cf32`/`.cs16`) with a SigMF sidecar, one or both channels |
+| [`tools/b210_rx.py`](tools/b210_rx.py) | Record IQ (`.cf32`/`.cs16`) with a SigMF sidecar, one or both channels. Captures at 20 MB/s or more go through `/dev/shm` automatically (`--ram`/`--no-ram`), then the data and sidecar are moved together; reports overflow count and samples vs expected |
 | [`tools/b210_tx.py`](tools/b210_tx.py) | Transmit any IQ file rfkit reads (HackRF `.cs8` too), with repeat/gap/dry-run |
 | [`tools/b210_gr_capture.py`](tools/b210_gr_capture.py) | Capture straight into NumPy with GNU Radio's UHD block (Python) |
 | [`../../tests/ota_b210.py`](../../tests/ota_b210.py) | Over-the-air test HackRF ↔ B210 for every modulation in the repo |

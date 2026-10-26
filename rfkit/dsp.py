@@ -489,3 +489,318 @@ def papr_db(x: np.ndarray) -> float:
     """Peak-to-average power ratio. High PAPR (OFDM, multitone) needs more headroom before the 8-bit DAC clips."""
     p = np.abs(x) ** 2
     return float(10 * np.log10(p.max() / np.mean(p)))
+
+
+# ----------------------------------------------------------------------------- symbol-rate refinement
+
+def _interp_symbols(y: np.ndarray, rate_sps: float, tau: float) -> np.ndarray:
+    """Linear-interpolated samples of y at tau, tau + sps, tau + 2 sps ... (sps may be fractional)."""
+    t = np.arange(tau, len(y) - 1, rate_sps)
+    i = t.astype(int)
+    f = (t - i).astype(np.float32)
+    return y[i] * (1 - f) + y[i + 1] * f
+
+
+def refine_symbol_rate(y: np.ndarray, fs: float, rate0: float, rel_span: float = 0.05, steps: int = 101,
+                       order: int = 2) -> tuple[float, np.ndarray, np.ndarray]:
+    """Search the symbol rate around an estimate for a PSK burst. Returns (best_rate, rates, metric).
+
+    Remove the carrier offset (M-th power), then for each candidate rate take one sample per symbol and
+    measure how steady the M-th-power phase is from symbol to symbol. At the right rate (and timing) the
+    metric peaks near 1. A 1-4 % rate error smears the constellation into rings even though everything else
+    is right: search before blaming the carrier loop. y should have >= 4 samples per symbol and be filtered
+    to roughly the signal bandwidth.
+    """
+    cfo = estimate_cfo(y, fs, power=order)
+    n = np.arange(len(y))
+    z = (y * np.exp(-1j * TWO_PI * cfo * n / fs)).astype(np.complex64)
+    rates = rate0 * (1 + np.linspace(-rel_span, rel_span, steps))
+    metric = np.zeros(steps)
+    for k, r in enumerate(rates):
+        sps = fs / r
+        best = 0.0
+        for tau in np.linspace(0, sps, 8, endpoint=False):
+            s = _interp_symbols(z, sps, tau) ** order
+            if len(s) < 8:
+                continue
+            c = np.abs(np.mean(s[1:] * np.conj(s[:-1]))) / (np.mean(np.abs(s) ** 2) or 1)
+            best = max(best, float(c))
+        metric[k] = best
+    return float(rates[int(np.argmax(metric))]), rates, metric
+
+
+def combine_repeats(bursts_: list[np.ndarray]) -> np.ndarray:
+    """Coherently add repeats of the same transmission (about +3 dB per doubling). Each burst is aligned in
+    time by cross-correlation with the first and rotated to its phase, then the waveforms are averaged.
+    Do this on the waveform, before slicing: averaging decisions afterwards gains much less."""
+    ref = np.asarray(bursts_[0], np.complex64)
+    acc = ref.copy()
+    for b in bursts_[1:]:
+        b = np.asarray(b, np.complex64)
+        n = min(len(ref), len(b))
+        L = 1 << int(np.ceil(np.log2(2 * n)))
+        c = np.fft.ifft(np.fft.fft(ref[:n], L) * np.conj(np.fft.fft(b[:n], L)))
+        k = int(np.argmax(np.abs(c)))
+        lag = k if k < L // 2 else k - L
+        bb = np.roll(b, lag)
+        ph = np.angle(np.vdot(bb[:n], ref[:n]))
+        acc[:n] += (bb[:n] * np.exp(1j * ph)).astype(np.complex64)
+    return acc / len(bursts_)
+
+
+# ----------------------------------------------------------------------------- OFDM
+
+def ofdm_detect(x: np.ndarray, fs: float, n_candidates=(64, 128, 256, 512, 1024, 2048),
+                cp_fracs=(1 / 4, 1 / 8, 1 / 16, 1 / 32)) -> dict:
+    """Find the FFT size, cyclic-prefix length and symbol boundaries of an OFDM signal.
+
+    The prefix repeats the end of the useful part, so x[n] correlates with x[n+N] for exactly CP samples
+    per symbol. For each (N, CP) the correlation is summed over a CP-long window and folded modulo the
+    symbol length; the right pair gives one sharp, repeatable peak. Returns
+    {n_fft, cp, start, period, score, subcarrier_spacing_hz}. N is in samples at the given rate."""
+    best = {"score": 0.0}
+    x = np.asarray(x, np.complex64)[: 400_000]
+    for N in n_candidates:
+        if len(x) < 6 * N:
+            continue
+        prod = x[:-N] * np.conj(x[N:])
+        pw = np.convolve(np.abs(x) ** 2, np.ones(N // 4), "same").mean() or 1
+        for cf in cp_fracs:
+            cp = int(N * cf)
+            m = np.abs(np.convolve(prod, np.ones(cp), "valid")) / (cp * (np.mean(np.abs(x) ** 2) or 1))
+            period = N + cp
+            n_fold = (len(m) // period) * period
+            if n_fold < 3 * period:
+                continue
+            fold = m[:n_fold].reshape(-1, period).mean(axis=0)
+            peak = int(np.argmax(fold))
+            score = float(fold[peak] / (np.median(fold) + 1e-9))
+            if score > best["score"]:
+                best = {"score": score, "n_fft": N, "cp": cp, "start": peak, "period": period,
+                        "subcarrier_spacing_hz": fs / N}
+    return best
+
+
+def ofdm_demod(x: np.ndarray, n_fft: int, cp: int, start: int, n_sym: int | None = None) -> np.ndarray:
+    """Strip the prefix and FFT every symbol. Returns an (n_sym, n_fft) array of subcarrier values in FFT
+    order (bin 0 = DC, negative frequencies at the end). Pick the occupied bins from the average power."""
+    period = n_fft + cp
+    total = (len(x) - start) // period
+    n_sym = total if n_sym is None else min(n_sym, total)
+    rows = [np.fft.fft(x[start + i * period + cp: start + (i + 1) * period]) for i in range(n_sym)]
+    return np.array(rows, np.complex64)
+
+
+def ofdm_occupied(Y: np.ndarray, rel_db: float = -10) -> np.ndarray:
+    """Indices of subcarriers with average power within rel_db of the strongest."""
+    p = np.mean(np.abs(Y) ** 2, axis=0)
+    return np.flatnonzero(10 * np.log10(p / p.max() + 1e-12) > rel_db)
+
+
+def ofdm_equalize(Y: np.ndarray, bins: np.ndarray, training: np.ndarray | None = None, order: int = 4
+                  ) -> np.ndarray:
+    """Per-subcarrier channel correction. With a known training symbol (values on `bins`), divide by
+    Y_train / training. Without one, estimate each subcarrier's phase from the M-th power average
+    (blind; leaves an M-fold ambiguity per subcarrier). Multipath or an echo gives each subcarrier a
+    different gain and phase, so without this step the constellation is unreadable even with perfect
+    timing. Returns the corrected values on `bins`, shape (n_sym, len(bins))."""
+    Z = Y[:, bins]
+    if training is not None:
+        h = Z[0] / training
+        return Z / h
+    ph = np.angle(np.mean(Z ** order, axis=0)) / order
+    return Z * np.exp(-1j * ph) / (np.mean(np.abs(Z), axis=0) + 1e-9)
+
+
+# ----------------------------------------------------------------------------- chirp spread spectrum
+
+def css_demod(x: np.ndarray, fs: float, bw: float, sf: int, start: int | None = None, n_sym: int | None = None,
+              frame: bool = True) -> dict:
+    """Demodulate LoRa-style chirp symbols: multiply by the conjugate up-chirp (dechirp) so each symbol
+    becomes one tone, and read its FFT bin. fs must be an integer multiple of bw.
+
+    frame=True expects a preamble of up-chirps followed by 2.25 sync down-chirps and then data. It finds the
+    symbol boundary, separates timing error from carrier offset with the sync down-chirps (a window t chips
+    late moves the up-chirp bin by +t and the down-chirp bin by -t), and returns only the data symbols.
+    frame=False (or an explicit start) just demodulates consecutive windows from `start`.
+    Returns {start, bins, values, reference_bin}; values = bins relative to the preamble bin, in 0..2^sf-1.
+    Estimate bw and sf from the waterfall first: the sweep slope is bw^2 / 2^sf."""
+    osr = int(round(fs / bw))
+    if abs(fs / bw - osr) > 1e-6:
+        raise ValueError("fs must be an integer multiple of bw")
+    nc = 2 ** sf
+    n = nc * osr
+    k = np.arange(n) / osr
+    ref = np.exp(-1j * TWO_PI * np.cumsum(((k % nc) / nc * bw - bw / 2)) / fs).astype(np.complex64)
+    wrap = (np.arange(nc) - nc) % n
+
+    def centred(v):
+        return (v + nc / 2) % nc - nc / 2
+
+    def sym_bins(offset, count, conj=False):
+        """[(peak position in bins with sub-bin interpolation, peak/mean ratio)] for consecutive windows."""
+        out = []
+        for i in range(count):
+            seg = x[offset + i * n: offset + (i + 1) * n]
+            if len(seg) < n:
+                break
+            # full-rate FFT: the tone sits at bin v before the chirp wraps and at v - nc after it, so add the
+            # two magnitudes (decimating first would let the segments interfere and move the peak by one bin)
+            sp = np.abs(np.fft.fft(seg * (np.conj(ref) if conj else ref)))
+            sc = sp[:nc] + sp[wrap]
+            m = int(np.argmax(sc))
+            a, b, c = sc[(m - 1) % nc], sc[m], sc[(m + 1) % nc]
+            den = a - 2 * b + c
+            out.append(((m + (0.5 * (a - c) / den if den else 0.0)) % nc, float(b / (sc.mean() + 1e-9))))
+        return out
+
+    if start is None:
+        step = max(1, n // 64)
+        scores = []
+        for off in range(0, n, step):
+            r = sym_bins(off, 4)
+            scores.append(np.mean([p for _, p in r]) if r else 0.0)
+        c = int(np.argmax(scores)) * step
+        fine = [(np.mean([p for _, p in sym_bins(o, 4)] or [0]), o) for o in range(max(0, c - step), c + step + 1)]
+        start = max(fine)[1]
+
+    def run(st, ref_pos):
+        total = (len(x) - st) // n
+        r = sym_bins(st, total if n_sym is None else min(n_sym, total))
+        pos = np.array([p for p, _ in r])
+        bins = np.round(pos).astype(int) % nc
+        vals = np.round(centred(pos - ref_pos)).astype(int) % nc
+        return {"start": st, "bins": bins, "values": vals, "reference_bin": int(round(ref_pos)) % nc}
+
+    if not frame:
+        r = sym_bins(start, 8)
+        ref_pos = r[0][0] if r else 0.0
+        return run(start, ref_pos)
+
+    total = (len(x) - start) // n
+    r = sym_bins(start, total)
+    pos = np.array([p for p, _ in r])
+    q = np.array([v for _, v in r])
+    good = q > 0.7 * q[: min(len(q), 24)].max()
+    i0 = next((i for i in range(len(good) - 3) if good[i:i + 3].all()), 0)   # skip noise and the partial first window
+    start += i0 * n
+    pos = pos[i0:]
+    ref0 = pos[0]
+    dev = np.flatnonzero(np.abs(centred(pos - ref0)) > 0.75)
+    p = int(dev[0]) if len(dev) else len(pos)                         # first window that is not a preamble chirp
+    up = float(np.mean(pos[:max(1, min(p, 6))]))
+    dn = sym_bins(start + p * n, 1, conj=True)[0][0]
+    # t = (up - dn) / 2 chips, but up - dn is only known modulo 2^sf, so t is ambiguous by half a symbol:
+    # try both and keep the one whose data windows have the tallest peaks (a half-symbol error splits them)
+    t0 = int(round(centred(up - dn) / 2 * osr))
+    best = None
+    for cand in (start - t0, start - t0 + n // 2, start - t0 - n // 2):
+        if cand < 0:
+            continue
+        qd = [v for _, v in sym_bins(cand, 14, conj=True)]
+        qu = [v for _, v in sym_bins(cand, 14)]
+        thr = 0.7 * max(qd or [0])
+        pd = next((w for w in range(len(qd)) if qd[w] > thr and qd[w] > qu[w]), None)
+        if pd is None:
+            continue
+        sc = np.mean([v for _, v in sym_bins(cand + (pd + 2) * n + n // 4, 8)] or [0])
+        if best is None or sc > best[0]:
+            best = (sc, cand, pd)
+    if best is None:
+        raise ValueError("css_demod: no sync down-chirps found (wrong bw/sf, or no frame preamble)")
+    _, start, p = best
+    pre = sym_bins(start, max(1, min(p, 6)))
+    ref_pos = float(np.mean([a for a, _ in pre]))                     # what is left of the preamble bin is CFO
+    out = run(start + (p + 2) * n + n // 4, ref_pos)
+    out["frame_start"] = start
+    return out
+
+
+# ----------------------------------------------------------------------------- spread spectrum (blind)
+
+def cyclic_lines(x: np.ndarray, fs: float, kind: str = "abs2", n: int = 6, min_hz: float = 50.0) -> list[dict]:
+    """Cyclostationary features: spectral lines of |x|^2 ("abs2") or x^2 ("sq") reveal repetition rates a
+    plain spectrum hides. A spread or PSK signal buried below the noise floor still shows a line at its
+    chip/symbol rate (abs2) and at twice its carrier (sq). Returns the strongest lines
+    [{freq_hz, prominence_db}]."""
+    x = np.asarray(x, np.complex64)
+    z = (np.abs(x) ** 2 if kind == "abs2" else x ** 2)
+    z = z - np.mean(z)
+    N = 1 << int(np.floor(np.log2(len(z))))
+    sp = np.abs(np.fft.fft(z[:N] * np.hanning(N))) ** 2
+    f = np.fft.fftfreq(N, 1 / fs)
+    sel = np.abs(f) >= min_hz
+    if kind == "abs2":
+        sel &= f > 0
+    db = 10 * np.log10(sp + 1e-20)
+    med = np.median(db[sel])
+    idx = np.flatnonzero(sel)
+    order = idx[np.argsort(db[idx])[::-1]]
+    out = []
+    for i in order:
+        if all(abs(f[i] - o["freq_hz"]) > 4 * fs / N for o in out):
+            out.append({"freq_hz": float(f[i]), "prominence_db": float(db[i] - med)})
+        if len(out) == n:
+            break
+    return out
+
+
+def dsss_recover_code(soft: np.ndarray, period: int, offset: int = 0) -> np.ndarray:
+    """Blind recovery of a repeating spreading code from soft chip samples (one real sample per chip).
+
+    Cut the stream into blocks of `period` chips. Every block is +code or -code (the data bit), so the
+    principal eigenvector of the block matrix's covariance is the code, and the sign of each bit does not
+    matter. Returns the code as +/-1 (overall sign ambiguous). Needs the chip rate and code length first
+    (see cyclic_lines and the autocorrelation of the soft chips)."""
+    s = np.asarray(soft, np.float64)[offset:]
+    n = len(s) // period
+    B = s[: n * period].reshape(n, period)
+    w, v = np.linalg.eigh(B.T @ B)
+    return np.sign(v[:, -1]).astype(np.int8)
+
+
+def dsss_despread(soft: np.ndarray, code: np.ndarray, offset: int = 0) -> np.ndarray:
+    """Correlate each code-length block with the code. Sign = data bit (1 for positive), magnitude =
+    confidence. Returns the correlation values."""
+    period = len(code)
+    s = np.asarray(soft, np.float64)[offset:]
+    n = len(s) // period
+    return s[: n * period].reshape(n, period) @ code.astype(np.float64)
+
+
+def bpsk_soft_chips(x: np.ndarray, fs: float, chip_rate: float, smooth_chips: int = 64) -> np.ndarray:
+    """Carrier- and timing-recover a (possibly very weak) BPSK stream to one real soft sample per chip.
+
+    Squaring removes the data: the angle of x^2 gives twice the carrier phase. The phase track is
+    smoothed over `smooth_chips` chips and *unwrapped*, so a +/-180 degree flip of the data never looks like a
+    phase step, then halved and removed. The sign of the result is ambiguous (decide it from a sync word or by
+    trying both). Works below the point where a Costas loop will lock; raise smooth_chips as SNR drops."""
+    sps = fs / chip_rate
+    cfo = estimate_cfo(x, fs, power=2)
+    n = np.arange(len(x))
+    z = (x * np.exp(-1j * TWO_PI * cfo * n / fs)).astype(np.complex64)
+    k = max(1, int(round(sps)))
+    box = np.convolve(z, np.ones(k, np.float32) / k, mode="same")
+    tau = int(np.argmax([np.mean(np.abs(box[p::k]) ** 2) for p in range(k)]))
+    chips = box[tau::k]
+    sq = chips ** 2
+    sm = np.convolve(sq, np.ones(smooth_chips) / smooth_chips, mode="same")
+    ph = np.unwrap(np.angle(sm)) / 2
+    return (chips * np.exp(-1j * ph)).real.astype(np.float32)
+
+
+def dsss_find_alignment(soft: np.ndarray, period: int) -> int:
+    """Chip offset (0..period-1) at which the block covariance has the strongest principal component, that is,
+    where the blocks line up with the code period."""
+    s = np.asarray(soft, np.float64)
+    best, arg = -1.0, 0
+    for off in range(period):
+        n = (len(s) - off) // period
+        if n < 4:
+            break
+        B = s[off: off + n * period].reshape(n, period)
+        w = np.linalg.eigvalsh(B.T @ B)
+        r = w[-1] / (w.sum() + 1e-12)
+        if r > best:
+            best, arg = r, off
+    return arg

@@ -262,3 +262,105 @@ def morse_from_runs(runs: list[tuple[int, float]]) -> str:
     if sym:
         text += MORSE_REV.get(sym, "?")
     return text.strip()
+
+
+# ----------------------------------------------------------------------------- unknown-framing search
+
+def printable_fraction(data: bytes) -> float:
+    """Share of bytes that are printable ASCII (space..~ plus CR/LF/TAB). Text scoring for brute-force decoders."""
+    if not data:
+        return 0.0
+    return sum(32 <= c < 127 or c in (9, 10, 13) for c in data) / len(data)
+
+
+def texty(data: bytes) -> float:
+    """Stricter text score than printable_fraction: letters, digits, space and common punctuation count 1,
+    other printable characters 0.25. Random bytes that happen to be printable score low."""
+    if not data:
+        return 0.0
+    good = sum((c < 128 and chr(c).isalnum()) or c in b" _{}-:.,!?/" for c in data)
+    other = sum((32 <= c < 127 or c in (9, 10, 13)) for c in data) - good
+    return (good + 0.25 * other) / len(data)
+
+
+def uart_decode(b, data_bits: int = 8, lsb_first: bool = True, stop_bits: int = 1, parity: bool = False,
+                offset: int = 0, short_last: bool = True) -> tuple[bytes, float]:
+    """Asynchronous serial frames: start bit, data bits (LSB first by default), optional parity, stop bit(s).
+
+    b is one entry per bit time. Returns (bytes, framing_ok) where framing_ok is the share of frames whose
+    start bit is constant and opposite to the constant stop bit (a wrong offset or frame length scores low).
+    short_last: also decode a final frame that has start + data bits but lost its stop bit. That happens when
+    a closing carrier or the end of the burst doubles as the stop bit, and a full-frame-only decoder silently
+    drops the last character.
+    """
+    b = np.asarray(b, np.uint8)
+    L = 1 + data_bits + int(parity) + stop_bits
+    out, starts, stops = [], [], []
+    i = offset
+    while i + L <= len(b):
+        fr = b[i:i + L]
+        d = fr[1:1 + data_bits]
+        out.append(_pack(d, lsb_first))
+        starts.append(fr[0])
+        stops.append(fr[-1])
+        i += L
+    if short_last and i + 1 + data_bits <= len(b):
+        out.append(_pack(b[i + 1:i + 1 + data_bits], lsb_first))
+    if not starts:
+        return bytes(out), 0.0
+    starts, stops = np.array(starts), np.array(stops)
+    ok = (np.all(starts == starts[0]) and np.all(stops == stops[0]) and starts[0] != stops[0])
+    frac = float(np.mean((starts == np.bincount(starts).argmax()) & (stops == np.bincount(stops).argmax())
+                         & (starts != stops)))
+    return bytes(out), 1.0 if ok else frac
+
+
+def _pack(d, lsb_first: bool) -> int:
+    v = 0
+    seq = d[::-1] if lsb_first else d
+    for bit in seq:
+        v = (v << 1) | int(bit)
+    return v
+
+
+def bruteforce(b, min_chars: int = 4, top: int = 8, min_score: float = 0.8) -> list[dict]:
+    """Try every plausible way of turning a sliced bit stream into text, rank by a text score (letters/digits/spaces count fully, other printable characters little).
+
+    Searched: polarity x bit order x { plain bytes at offsets 0-7 | UART frames of 10 and 11 bit times at every
+    offset | Manchester (both conventions, both phases) then plain bytes }. Each hit is
+    {mode, offset, invert, lsb_first, score, framing, text, hex}. Useful when the preamble/sync is unknown.
+    A score near 1.0 over a long enough string is almost never accidental; short strings need judgement.
+    """
+    b0 = np.asarray(b, np.uint8)
+    hits = []
+
+    def add(mode, off, inv, lsb, data, framing=1.0):
+        if len(data) < min_chars:
+            return
+        s = texty(data)
+        if printable_fraction(data) >= min_score and s >= min_score * 0.75:
+            hits.append({"mode": mode, "offset": off, "invert": inv, "lsb_first": lsb, "score": round(s, 3),
+                         "framing": round(framing, 3), "text": data.decode("latin-1"), "hex": data.hex()})
+
+    for inv in (0, 1):
+        s = b0 ^ inv
+        for lsb in (False, True):
+            for off in range(8):
+                n = (len(s) - off) // 8
+                if n:
+                    add("plain", off, inv, lsb, to_bytes(s[off:off + 8 * n], lsb_first=lsb))
+            for frame_len, kw in ((10, {}), (11, {"parity": True})):
+                for off in range(frame_len):
+                    data, fr = uart_decode(s, lsb_first=lsb, offset=off, **kw)
+                    add(f"uart{frame_len}", off, inv, lsb, data, fr)
+            for ieee in (True, False):
+                for ph in (0, 1):
+                    dec, _ = manchester_decode(s[ph:], ieee)
+                    for off in range(8):
+                        n = (len(dec) - off) // 8
+                        if n:
+                            add("manchester" + ("" if ieee else "-thomas"), ph * 100 + off, inv, lsb,
+                                to_bytes(dec[off:off + 8 * n], lsb_first=lsb))
+    hits.sort(key=lambda h: (h["score"] * min(1.0, len(h["text"]) / 16), h["framing"], len(h["text"])),
+              reverse=True)
+    return hits[:top]

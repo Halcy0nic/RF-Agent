@@ -7,11 +7,12 @@ Modules
           waterfall images, AWGN and impairments
     dsp   receivers: PSD, spectrogram, carrier search, channelizer, envelope/FM discriminator, bursts,
           symbol-rate estimation, slicing, Costas loop, SNR
+    survey wide-band event table: carriers / beacons / hoppers / one-offs (tools/survey.py)
     plot  PNG plots (PSD, waterfall, overview, constellation, eye) — headless
 
 Add the repo root to sys.path (or `pip install -e .`) and `from rfkit import iq, bits, mod, dsp`.
 """
-from . import bits, dsp, iq, mod  # noqa: F401
+from . import bits, dsp, iq, mod, survey  # noqa: F401
 
-__all__ = ["bits", "dsp", "iq", "mod"]
+__all__ = ["bits", "dsp", "iq", "mod", "survey"]
 __version__ = "0.1.0"

@@ -150,7 +150,9 @@ Write a WAV and listen, or check the dominant audio frequency for test tones.
 
 ## 8. Beyond the basics: techniques that decided real captures
 
-Generic lessons from decoding harder captures. None of these needs more than NumPy/SciPy.
+Generic lessons from decoding harder captures. None of these needs more than NumPy/SciPy. The tools are
+`rx_decode.py uart|ofdm|chirp|dsss` and `psk --search-rate`, built on `rfkit.bits.bruteforce` and the receivers in
+`rfkit.dsp`; `tests/test_advanced.py` shows each one on a generated signal.
 
 ### Serial data riding on a carrier (UART over OOK or FSK)
 
@@ -220,9 +222,27 @@ A signal buried under the noise floor with a flat, wide spectrum may be DSSS. De
 
 ### Audio that has to be identified
 
-Demodulate to a WAV (de-emphasis, band-limit), then run speech-to-text on it when the answer depends on what
-was said. An offline model such as `faster-whisper` works on a CPU (pass `device="cpu"`). Treat the transcript
-as a lead, not a proof: confirm against an external source.
+Demodulate to a WAV (`rx_decode.py fm cap.wav --out audio.wav`), then run speech-to-text when the answer depends
+on what was said. Tested recipe (separate venv, so it does not disturb the repo's):
+
+```bash
+python3 -m venv /tmp/asr && /tmp/asr/bin/pip install faster-whisper
+ffmpeg -i audio.wav -ar 16000 -ac 1 audio16.wav
+```
+```python
+import numpy as np, wave
+from faster_whisper import WhisperModel
+w = wave.open("audio16.wav")
+a = np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float32) / 32768   # pass an array, not a path
+m = WhisperModel("small", device="cpu", compute_type="int8")     # device="cpu": no CUDA libraries needed
+for seg in m.transcribe(a, language="en")[0]:
+    print(f"{seg.start:.1f}-{seg.end:.1f} {seg.text}")
+```
+
+Two pitfalls hit in practice: passing a file path can fail inside PyAV on newer releases (hence the array), and
+leaving out `device="cpu"` tries to load CUDA's `libcublas`. A short repeated phrase is easy to hallucinate: use a
+larger model (`medium`) and `word_timestamps=True` to see where speech really is. Treat the transcript as a lead,
+not a proof, and confirm it against an external source.
 
 ### General habits that saved time
 

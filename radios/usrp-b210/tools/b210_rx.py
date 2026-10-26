@@ -5,6 +5,7 @@
     b210_rx.py --freq 915e6 --rate 10e6 --gain 30 --ant TX/RX --channel 1 --seconds 2 -o cap.cs16
     b210_rx.py --freq 2.44e9 --rate 20e6 --gain 50 --channels 0,1 --seconds 1 -o mimo.cf32   # -> mimo_ch0/1.cf32
     b210_rx.py --freq 98e6 --rate 56e6 --otw sc8 --seconds 1 -o wide.cs16                   # 56 MS/s needs sc8
+    b210_rx.py --freq 915e6 --rate 30e6 --seconds 60 -o wide.cs16                           # >= 20 MB/s: auto RAM (see below)
 
 Output format follows the extension: .cf32 (complex float32, rfkit default) or .cs16 (int16 I/Q).
 A <file>.sigmf-meta is written next to each file (rate, centre, gain, antenna, channel) so
@@ -13,6 +14,12 @@ rfkit.iq / tools/iq_inspect.py can open it without extra arguments (open the .si
 UHD antenna names on each channel: "TX/RX" and "RX2". On the OpenSourceSDRLab Artix-7 board,
 channel 0 = TRX1 (TX/RX) + RX1 (RX2); channel 1 = TRX2 (TX/RX) + RX2 (RX2).
 Needs UHD_IMAGES_DIR set (radios/usrp-b210/tools/setup_images.sh).
+
+Long or wide captures (data rate >= 20 MB/s, or --ram): the recording goes to /dev/shm first and is moved to -o
+together with its .sigmf-meta afterwards. Writing straight to disk at these rates dropped samples and ended in
+a truncated file even though the exit code was 0; RAM did not. If /dev/shm is too small the tool falls back to
+disk with a warning (--ram: error instead). --no-ram forces disk. The JSON reports overflow_count, samples vs
+expected_samples and complete; the same check prints a WARNING on stderr when a capture is short or overflowed.
 """
 from __future__ import annotations
 
@@ -26,6 +33,8 @@ import sys
 from pathlib import Path
 
 DEFAULT_IMAGES = Path.home() / ".local/share/uhd/images"
+SHM = Path("/dev/shm")
+RAM_AUTO_BYTES_PER_S = 20e6        # at or above this, straight-to-disk recording has dropped samples
 
 
 def f_num(s: str) -> float:
@@ -76,6 +85,31 @@ def write_meta(data: Path, fmt: str, rate: float, freq: float, extra: dict) -> P
     return p
 
 
+def count_overflows(log: str) -> int:
+    """UHD's rx_samples_to_file prints a bare 'O' per overflow and the long explanation only the first time.
+    Count the marks, and report at least 1 whenever the explanation appeared."""
+    marks = sum(len(m) for m in re.findall(r"(?<![A-Za-z0-9_])(O+)(?![A-Za-z0-9_])", log))
+    return max(marks, 1 if "Got an overflow" in log else 0)
+
+
+def plan_ram(a, out: Path, bytes_needed: float, rate_bytes_per_s: float):
+    """Decide where to record. Returns (record_path, use_ram, notes)."""
+    want = a.ram or (not a.no_ram and rate_bytes_per_s >= RAM_AUTO_BYTES_PER_S)
+    if not want:
+        return out, False, []
+    if not SHM.is_dir():
+        if a.ram:
+            sys.exit("--ram: /dev/shm does not exist on this system")
+        return out, False, ["no /dev/shm here: recording straight to disk"]
+    free = shutil.disk_usage(SHM).free
+    if bytes_needed * 1.05 > free:
+        msg = f"/dev/shm has {free / 1e9:.1f} GB free, capture needs {bytes_needed / 1e9:.1f} GB"
+        if a.ram:
+            sys.exit(f"--ram: {msg}")
+        return out, False, [msg + ": recording straight to disk (expect overflows at this rate)"]
+    return SHM / f"b210_rx_{os.getpid()}_{out.name}", True, []
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("-o", "--out", required=True, help="output file (.cf32 or .cs16)")
@@ -91,8 +125,12 @@ def main():
     ap.add_argument("--args", default="type=b200", help="UHD device args (e.g. 'serial=XXXXXXX,master_clock_rate=32e6')")
     ap.add_argument("--ref", choices=["internal", "external", "gpsdo"])
     ap.add_argument("--extra", default="", help="extra rx_samples_to_file arguments")
+    ap.add_argument("--ram", action="store_true", help="record to /dev/shm, then move (default for >= 20 MB/s)")
+    ap.add_argument("--no-ram", action="store_true", help="always record straight to the output path")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
+    if a.ram and a.no_ram:
+        sys.exit("--ram and --no-ram are mutually exclusive")
 
     out = Path(a.out)
     fmt = {".cf32": "float", ".cfile": "float", ".fc32": "float", ".cs16": "short", ".s16": "short"}.get(out.suffix)
@@ -100,12 +138,17 @@ def main():
         sys.exit("output must end in .cf32 or .cs16")
     out.parent.mkdir(parents=True, exist_ok=True)
     chans = a.channels or a.channel
+    chan_list = chans.split(",")
     nsamps = int(round(a.seconds * a.rate))
+    bps = 8 if fmt == "float" else 4
+    rate_bytes = a.rate * bps * len(chan_list)
+    # per-channel files are named <stem>_ch<N><suffix> when several channels are recorded
+    rec, use_ram, notes = plan_ram(a, out, nsamps * bps * len(chan_list), rate_bytes)
     cmd = [uhd_example("rx_samples_to_file"), "--args", a.args, "--freq", str(a.freq), "--rate", str(a.rate),
            "--gain", str(a.gain), "--ant", a.ant, "--channels", chans, "--type", fmt]
     # one UHD stream command holds at most 2^28 samples (26 s at 10 MS/s): use --duration beyond that
     cmd += ["--duration", str(a.seconds)] if nsamps >= 2**28 else ["--nsamps", str(nsamps)]
-    cmd += ["--file", str(out)]
+    cmd += ["--file", str(rec)]
     if a.bw:
         cmd += ["--bw", str(a.bw)]
     if a.otw:
@@ -114,29 +157,52 @@ def main():
         cmd += ["--ref", a.ref]
     if a.extra:
         cmd += a.extra.split()
-    print("$ " + " ".join(cmd), flush=True)
+    for n in notes:
+        print("note: " + n, file=sys.stderr)
+    print("$ " + " ".join(cmd) + ("   # recording to RAM, then moving to " + str(out) if use_ram else ""), flush=True)
     if a.dry_run:
         return
+
+    def names(base: Path):
+        return [base] if len(chan_list) == 1 else [base.with_name(f"{base.stem}_ch{c}{base.suffix}") for c in chan_list]
+
+    rec_files, out_files = names(rec), names(out)
     p = subprocess.run(cmd, env=uhd_env(), capture_output=True, text=True)
     log = p.stdout + p.stderr
     m = re.search(r"Actual RX Rate: ([\d.]+) Msps", log)
     actual = float(m.group(1)) * 1e6 if m else a.rate
-    overflows = log.count("O") if "Got an overflow" in log else 0
+    overflow_count = count_overflows(log)
     if p.returncode != 0:
         print(log[-2000:], file=sys.stderr)
+        for f in rec_files:
+            if use_ram:
+                f.unlink(missing_ok=True)
         sys.exit(p.returncode)
-    files = [out] if "," not in chans else [out.with_name(f"{out.stem}_ch{c}{out.suffix}") for c in chans.split(",")]
-    result = []
-    for ch, f in zip(chans.split(","), files):
-        if not f.exists():
-            print(f"missing output {f}", file=sys.stderr)
+    expected = int(round(a.seconds * actual))
+    result, warnings = [], []
+    for ch, src, dst in zip(chan_list, rec_files, out_files):
+        if not src.exists():
+            print(f"missing output {src}", file=sys.stderr)
             continue
-        meta = write_meta(f, fmt, actual, a.freq, {"rfagent:gain_db": a.gain, "rfagent:antenna": a.ant,
-                                                    "rfagent:channel": int(ch)})
-        bps = 8 if fmt == "float" else 4
-        result.append({"file": str(f), "meta": str(meta), "samples": f.stat().st_size // bps})
+        samples = src.stat().st_size // bps
+        if use_ram:
+            shutil.move(str(src), str(dst))        # data first, then the sidecar next to its final home
+        meta = write_meta(dst, fmt, actual, a.freq, {"rfagent:gain_db": a.gain, "rfagent:antenna": a.ant,
+                                                      "rfagent:channel": int(ch)})
+        complete = samples >= 0.999 * expected
+        if not complete:
+            warnings.append(f"{dst.name}: {samples} samples, expected {expected} ({100 * samples / max(expected, 1):.1f} %)"
+                            ": capture is truncated")
+        result.append({"file": str(dst), "meta": str(meta), "samples": samples, "expected_samples": expected,
+                       "complete": complete})
+    if overflow_count:
+        warnings.append(f"{overflow_count} overflow(s) (UHD reports at least this many): samples were dropped, so timing across them is not "
+                        "reliable" + ("" if use_ram else "; try --ram or a lower rate"))
+    for w in warnings:
+        print("WARNING: " + w, file=sys.stderr)
     print(json.dumps({"rate": actual, "freq": a.freq, "gain": a.gain, "antenna": a.ant, "channels": chans,
-                      "overflow_reported": "Got an overflow" in log, "files": result}, indent=2))
+                      "recorded_via": "ram" if use_ram else "disk", "overflow_reported": "Got an overflow" in log,
+                      "overflow_count": overflow_count, "warnings": warnings, "files": result}, indent=2))
 
 
 if __name__ == "__main__":
