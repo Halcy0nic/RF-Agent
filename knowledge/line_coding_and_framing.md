@@ -91,3 +91,16 @@ Try all combinations when bytes look "almost" right:
 4f 4f 4b 20 48 45 4c 4c 4f   "OOK HELLO"
 d7 b9                   CRC-16/CCITT-FALSE over [09 .. 4f]  ✓
 ```
+
+## Asynchronous serial (UART) framing
+
+| Field | Typical value |
+|---|---|
+| Idle | One level held between frames (carrier on or off, depending on the keying) |
+| Start bit | One bit time at the opposite level |
+| Data | 8 bits, **LSB first** |
+| Stop | One bit time at the idle level (may be implied by a closing carrier) |
+
+Recognise it by bit times that are integer multiples of one base time, a start/stop pattern recurring every
+10 slots, and printable ASCII after unpacking. Brute-force frame length (10/11), start offset, polarity and
+bit order, and score by printable-character share.

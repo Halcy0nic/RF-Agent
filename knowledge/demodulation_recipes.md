@@ -147,3 +147,88 @@ Write a WAV and listen, or check the dominant audio frequency for test tones.
    and timings, and `-X` flex decoders turn the guess into bits. Verified here: it classified the bench's
    1 kbit/s OOK packet as NRZ, 1000 µs, and the flex decoder printed `094f4f4b2048454c4c4fd7b9`
    (length + "OOK HELLO" + CRC).
+
+## 8. Beyond the basics: techniques that decided real captures
+
+Generic lessons from decoding harder captures. None of these needs more than NumPy/SciPy.
+
+### Serial data riding on a carrier (UART over OOK or FSK)
+
+After slicing, the bit stream is often an ordinary asynchronous serial line: idle level, a start bit, 8 data bits
+**least significant bit first**, a stop bit. Signs: bit times are an integer multiple of one base time, every
+10th slot repeats the same start/stop pattern, and the preamble is a long carrier or alternating bits.
+
+1. Measure the base time (shortest run in the sliced stream) and sample at its centres.
+2. Try frame lengths 10 and 11 and every start offset 0..L-1, both polarities, both bit orders.
+3. Score each result by the share of printable characters. The right combination stands out immediately.
+4. **Check the last frame.** If the closing carrier doubles as the stop bit, the final character is one slot
+   short and a decoder that only takes full frames silently drops it.
+
+### Wide survey and bursty or hopping signals
+
+- Capture the whole band once (10–30 MS/s into `/dev/shm`) and build a coarse time-frequency map first
+  (tens of ms per row, a few thousand FFT bins). Do not guess a channel before you have seen the map.
+- **Separate the signal from the decoys by behaviour**, not by level: fixed-frequency chatter with a regular
+  period is a distractor, a burst whose frequency changes in steps is the hopper. List events as
+  (time, duration, frequency) and look for dwell structure (same frequency for N bursts, then a step).
+- Refine the frequency with a long FFT inside the burst (a coarse bin is tens of kHz off), mix to baseband,
+  low-pass and decimate before slicing.
+- Identical repeats in one dwell can be averaged or used to confirm a decode. Compare the payloads from
+  different dwells before assuming they are the same.
+- The decode is often the same OOK/FSK recipe as above, applied after you have found the right burst.
+
+### Fuzzy constellation? Check the symbol rate first
+
+If a PSK constellation looks like smeared rings rather than tight points, the carrier loop is usually fine and
+the **symbol rate is slightly wrong**. Search a grid of rates around the estimate and pick the one that
+maximises cluster tightness. Then resolve the phase ambiguity (BPSK 2, QPSK 4) and the bit mapping by brute
+force with a text-likelihood or CRC score. If the same burst repeats, combine the repeats **at waveform level**
+(after aligning in time and phase) before slicing, which gains about 3 dB per doubling.
+
+### BPSK with unknown polarity
+
+Square the signal (z²) to get a line at 2 × the carrier and recover the carrier from it; the sign of the data
+is then ambiguous. Differentially decode, or try both polarities and let a sync word or text score decide.
+
+### Multi-carrier (OFDM)
+
+1. Autocorrelate the signal at lag N (the useful symbol length). Peaks every N + CP samples reveal the symbol
+   boundaries; the lag with the strongest peak tells you N and the cyclic-prefix length.
+2. Drop the prefix, take an N-point FFT per symbol, keep the occupied subcarriers.
+3. **Equalise per subcarrier** from a known training symbol or pilots (divide by the channel estimate). Without
+   it a multipath or echo makes the constellation unreadable even though the timing is perfect.
+4. Then slice each subcarrier as BPSK/QPSK and read the bits in subcarrier order, then symbol order.
+
+### Chirp spread spectrum
+
+Multiply each symbol by the conjugate of a reference up-chirp (dechirp). Every symbol becomes a single tone;
+its FFT bin is the symbol value. The sweep rate (bandwidth² / 2^SF) and bandwidth set the chirp shape, so
+estimate them from the spectrogram slope before dechirping. The signal can sit well below the noise floor in a
+waterfall yet decode cleanly after dechirping.
+
+### Direct-sequence spread spectrum, code unknown
+
+A signal buried under the noise floor with a flat, wide spectrum may be DSSS. Detect it before decoding:
+
+- Square or take |z|² and look for a **cyclostationary** line at the chip rate and at its multiples.
+- The autocorrelation of the despread-free signal repeats at multiples of (code length × samples per chip).
+- With the chip rate and code period known, fold the signal into blocks of one code period. The blocks are
+  ± the same sequence, so the **principal eigenvector of the block matrix** is the spreading code, with no prior
+  knowledge needed. Correlate each block with it: the sign is the data bit, and the processing gain lifts it
+  out of the noise.
+- Then treat the bit stream like any other (bit order, offset, ASCII score).
+
+### Audio that has to be identified
+
+Demodulate to a WAV (de-emphasis, band-limit), then run speech-to-text on it when the answer depends on what
+was said. An offline model such as `faster-whisper` works on a CPU (pass `device="cpu"`). Treat the transcript
+as a lead, not a proof: confirm against an external source.
+
+### General habits that saved time
+
+- Do not submit or conclude from a first partial decode. Re-check the symbol rate, bit order, polarity and
+  alignment before concluding the signal is "noisy".
+- Write each pipeline as a small script that saves intermediate `.npy` files (channelised IQ, soft symbols), so
+  a changed assumption costs seconds, not a re-capture.
+- When a recording holds more than one plausible answer, use the question's constraints to choose rather than
+  the first decode.

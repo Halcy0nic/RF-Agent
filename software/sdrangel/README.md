@@ -179,3 +179,30 @@ c quit
 7. **Channel adds are asynchronous**: the POST returns "submitted successfully" before the channel exists.
 8. SDRangel saves its configuration on a clean exit (`DELETE /sdrangel` or Quit). After a crash it restarts
    with the previously saved setup.
+
+---
+
+## 11. Linux host notes (Ubuntu)
+
+Verified on Ubuntu 26.04 (x86-64) with a B210 and SDRangel 8.0.0 (the `.deb` reports 7.27.2).
+
+| Item | State |
+|---|---|
+| Install | Use the upstream release `.deb` (`sudo apt install ./sdrangel_*.deb`). **The snap build has no libuhd**, so the USRP never appears. Remove the snap if it is installed (`sudo snap remove sdrangel`) so the menu entry starts the right binary |
+| UHD images | UHD loads the FX3 firmware and the FPGA image from the host's disk on every open. Run `radios/usrp-b210/tools/setup_images.sh --variant 75T` once. SDRangel **must see `UHD_IMAGES_DIR`**; the compiled-in default path (`/usr/share/uhd/images`) is ignored by Ubuntu's UHD |
+| Started from a shell | Inherits the variable if `~/.zshrc` exports it (`export UHD_IMAGES_DIR="$HOME/.local/share/uhd/images"`) |
+| Started from the desktop menu | Does **not** read `~/.zshrc`, so the USRP is missing from the device list. Fix with a per-user override that wraps the command |
+| One owner | SDRangel and `b210_rx.py`/`uhd_*` cannot use the board at the same time. Close SDRangel (`pkill -x sdrangel`) before scripted captures |
+
+Per-user menu override (`~/.local/share/applications/sdrangel.desktop`, copy the system file and change `Exec`):
+
+```ini
+Exec=env UHD_IMAGES_DIR=/home/USER/.local/share/uhd/images sdrangel
+```
+
+Symptom of a missing variable: the "Select sampling device" dialog lists only the other devices, no `Custom_SDR_B210[0:0]`.
+Check with `UHD_IMAGES_DIR=... uhd_find_devices` first.
+
+Using it for a survey: set the sample rate as wide as the host handles (10–30 MS/s), manual gain, and read the
+waterfall to find where and when activity happens. Then record with `b210_rx.py` (RAM disk for wide captures) and
+analyse offline; the GUI is for finding signals, scripts are for decoding them.

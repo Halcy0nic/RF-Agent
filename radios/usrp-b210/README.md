@@ -393,7 +393,7 @@ The sections above were written on macOS. Verified on Ubuntu (x86-64, 2026-10-26
 | udev | The apt package installs `/usr/lib/udev/rules.d/60-uhd-host.rules`; the user needs to be in `plugdev` |
 | UHD images | **Per host.** UHD loads the FX3 firmware and the FPGA image from the host's disk every time it opens the board, nothing is flashed, so the images installed on another machine do not help. Run `tools/setup_images.sh --variant 75T` once per host. It writes `~/.local/share/uhd/images` and adds `UHD_IMAGES_DIR` to `~/.zshrc` (open a new shell afterwards) |
 | Device | Before UHD opens it, `lsusb` shows `2500:0020` (FX3 bootloader, normal). `uhd_find_devices` then finds `Custom_SDR_B210`. `uhd_usrp_probe --args type=b200`: B210, FW 8.0, USB 3, register loopback passed, RX 50–6000 MHz, RX gain 0–76 dB |
-| SDR++ / SDRangel | The Ubuntu SDR++ package has no USRP source and SDRangel is not installed. Use UHD (`b210_rx.py`, `uhd_fft`) or GNU Radio. See [../../software/sdr++/README.md](../../software/sdr++/README.md) section 11 |
+| SDR++ / SDRangel | The Ubuntu SDR++ package has no USRP source. SDRangel works once installed from its release `.deb` (the snap has no UHD) with `UHD_IMAGES_DIR` set; see [../../software/sdrangel/README.md](../../software/sdrangel/README.md) section 11. Otherwise use UHD (`b210_rx.py`, `uhd_fft`) or GNU Radio. SDR++: [../../software/sdr++/README.md](../../software/sdr++/README.md) section 11 |
 
 ### UHD 4.9 versus 4.10 differences
 
@@ -415,3 +415,8 @@ The sections above were written on macOS. Verified on Ubuntu (x86-64, 2026-10-26
   gain 40. They never carry modulation and are not signals. Judge by whether the line appears and disappears with
   other activity, or sits at an integer multiple of the 16 MHz master clock.
 - Over the air at ~1 m (gain 40, RX2): a 433.05 MHz OOK signal was 44 dB over the noise floor in a 2.4 kHz bin.
+- **One program owns the board.** If SDRangel (or any UHD program) is open, `uhd_find_devices` reports "No UHD Devices
+  Found" even though `lsusb` still shows `2500:0020`. Close the other program first (`pkill -x sdrangel`, exact name match).
+- **Wide captures:** 30 MS/s sc16 (120 MB/s) streamed from the B210 on USB 3 into `/dev/shm` for 60 s gave one reported
+  overflow; the file was still usable for burst work, but check `overflow_reported` and avoid relying on timing across it.
+  The tool's own help notes that 56 MS/s needs `--otw sc8`; the tool picks the right wire-format flag per UHD version.
