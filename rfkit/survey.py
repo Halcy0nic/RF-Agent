@@ -4,13 +4,13 @@
     ev = survey.find_events(S, f, row_s, center_hz)  # [{t_s, dur_s, freq_hz, bw_hz, level_db}, ...]
     groups = survey.classify(ev, span_s)             # beacons / hoppers / one-offs
 
-Everything is NumPy + SciPy (ndimage). The classification is behavioural, not level-based: a loud beacon and a
+NumPy only to import; SciPy (ndimage) is needed only by find_events(), and is imported there so that
+`import rfkit` works without SciPy. The classification is behavioural, not level-based: a loud beacon and a
 quiet hopper are told apart by what their events do over time.
 """
 from __future__ import annotations
 
 import numpy as np
-from scipy import ndimage
 
 
 def tfmap(blocks, fs: float, row_s: float = 0.01, nfft: int = 4096):
@@ -47,6 +47,10 @@ def find_events(S: np.ndarray, f: np.ndarray, row_s: float, center_hz: float = 0
     persistent_db   bins whose *median* over time sits this far above the floor are continuous carriers; they
                     are reported separately as {"kind": "carrier"} and excluded from burst detection.
     Event fields: t_s, dur_s, freq_hz (absolute, level-weighted), bw_hz, level_db (peak over floor)."""
+    try:
+        from scipy import ndimage
+    except ImportError as e:  # keep `import rfkit` NumPy-only; only this function needs SciPy
+        raise ImportError("rfkit.survey.find_events needs SciPy: pip install scipy") from e
     floor = noise_floor(S)
     med = np.median(S, axis=0)
     carriers = med > floor + persistent_db

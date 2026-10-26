@@ -12,7 +12,7 @@ OFDM and pictures in the waterfall. It also gives an agent ready-made tools to d
 
 ![Waterfall fingerprints of the generated signals, received over the air](../knowledge/images/waterfall_fingerprints.png)
 
-Everything here was verified twice: in software loopback (`tests/test_loopback.py`, 17 tests) and over the
+Everything here was verified twice: in software loopback (`tests/test_loopback.py`, 17 tests; harder receivers in `tests/test_advanced.py`) and over the
 air, HackRF → RTL-SDR at 433.92 MHz, where every modulation decoded (`tests/ota_test.py`, results in
 [12_verifying_over_the_air.md](12_verifying_over_the_air.md)).
 

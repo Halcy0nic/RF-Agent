@@ -194,6 +194,15 @@ def test_survey_fast_hopper_and_noise_events():
     assert len(g["hoppers"]) == 1 and len(g["hoppers"][0]["dwells"]) == 10, g["hoppers"]
 
 
+def test_import_rfkit_without_scipy():
+    import subprocess
+    code = ("import sys; sys.modules['scipy'] = None; sys.modules['scipy.ndimage'] = None; "
+            "import rfkit; print('ok')")
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                       cwd=str(Path(__file__).resolve().parents[1]))
+    assert r.stdout.strip() == "ok", r.stderr[-300:]
+
+
 def test_b210_rx_helpers():
     import importlib.util
     spec = importlib.util.spec_from_file_location("b210_rx", Path(__file__).resolve().parents[1] /
